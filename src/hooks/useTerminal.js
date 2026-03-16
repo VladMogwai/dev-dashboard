@@ -47,7 +47,7 @@ const termConfig = {
  *   claudeMode     — reserved for future use
  */
 export function useTerminal(containerRef, projectId, type, active, options = {}) {
-  const { onReady } = options;
+  const { onReady, onCommand } = options;
 
   const termRef = useRef(null);
   const fitAddonRef = useRef(null);
@@ -56,11 +56,14 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
   const unsubRef = useRef(null);
   const initializedRef = useRef(false);
   const resizeObserverRef = useRef(null);
+  const observerInitTimerRef = useRef(null);
   const onReadyRef = useRef(onReady);
+  const onCommandRef = useRef(onCommand);
 
-  // Keep onReady ref fresh without triggering re-renders
+  // Keep refs fresh without triggering re-renders
   useEffect(() => {
     onReadyRef.current = onReady;
+    onCommandRef.current = onCommand;
   });
 
   // ── Fit with retry — waits until container has non-zero dimensions ──────────
@@ -119,7 +122,7 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
         case 'k': {
           // Clear screen
           if (sessionIdRef.current) {
-            ptyInput(sessionIdRef.current, '\x1b[H\x1b[2J');
+            ptyInput(sessionIdRef.current, 'clear\r');
           }
           return false;
         }
@@ -157,20 +160,41 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
     // Attach custom key handler
     term.attachCustomKeyEventHandler(makeKeyHandler(term));
 
-    // Fit once container has real dimensions
-    fitWhenReady();
-
-    // Watch for container size changes and re-fit
-    const observer = new ResizeObserver(() => {
-      fitWhenReady();
+    // Fit xterm to actual container size BEFORE creating PTY so the PTY starts
+    // with the correct dimensions — this eliminates the SIGWINCH that causes
+    // a duplicate prompt on startup.
+    await new Promise((resolve) => {
+      const attempt = () => {
+        const el = containerRef.current;
+        if (!el) { resolve(); return; }
+        if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+          try { fitAddon.fit(); } catch (_) {}
+          resolve();
+        } else {
+          requestAnimationFrame(attempt);
+        }
+      };
+      requestAnimationFrame(attempt);
     });
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-    resizeObserverRef.current = observer;
 
-    // Create PTY session
-    const result = await createPty(projectId, type);
+    const initCols = term.cols || 120;
+    const initRows = term.rows || 30;
+
+    // Create PTY with the exact terminal dimensions — no resize needed after start
+    const result = await createPty(projectId, type, initCols, initRows);
+
+    // Start ResizeObserver only after PTY is ready to handle resizes
+    let resizeTimer = null;
+    const observerInitTimer = observerInitTimerRef.current = setTimeout(() => {
+      const observer = new ResizeObserver(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => fitWhenReady(), 80);
+      });
+      if (containerRef.current) {
+        observer.observe(containerRef.current);
+      }
+      resizeObserverRef.current = observer;
+    }, 300);
     if (!result.success) {
       term.write('\r\n\x1b[31m[Failed to create terminal session]\x1b[0m\r\n');
       return;
@@ -185,10 +209,27 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
       }
     });
 
-    // Send terminal input to PTY
+    // Send terminal input to PTY + track typed commands for history
+    let cmdBuffer = '';
     term.onData((data) => {
       if (sessionIdRef.current) {
         ptyInput(sessionIdRef.current, data);
+      }
+      // Track user-typed commands so they appear in command palette history
+      if (data === '\r') {
+        // Enter pressed — save buffered command
+        const cmd = cmdBuffer.trim();
+        if (cmd && onCommandRef.current) onCommandRef.current(cmd);
+        cmdBuffer = '';
+      } else if (data === '\x7f') {
+        // Backspace
+        cmdBuffer = cmdBuffer.slice(0, -1);
+      } else if (data === '\x03' || data === '\x15') {
+        // Ctrl+C or Ctrl+U — clear line
+        cmdBuffer = '';
+      } else if (data.length === 1 && data >= ' ') {
+        // Printable character
+        cmdBuffer += data;
       }
     });
 
@@ -226,6 +267,10 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
   // ── Public API ────────────────────────────────────────────────────────────
 
   const dispose = useCallback(() => {
+    if (observerInitTimerRef.current) {
+      clearTimeout(observerInitTimerRef.current);
+      observerInitTimerRef.current = null;
+    }
     if (resizeObserverRef.current) {
       resizeObserverRef.current.disconnect();
       resizeObserverRef.current = null;

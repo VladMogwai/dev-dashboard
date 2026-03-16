@@ -107,7 +107,7 @@ const sessions = new Map();
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-async function create(sessionId, cwd, onData) {
+async function create(sessionId, cwd, onData, cols, rows) {
   if (!pty) {
     console.error('node-pty not loaded');
     return;
@@ -121,13 +121,13 @@ async function create(sessionId, cwd, onData) {
   const shellEnv = await captureShellEnv();
 
   const shell = process.env.SHELL || '/bin/zsh';
-  const shellArgs = ['-l'];
+  const shellArgs = [];
 
   try {
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
-      cols: 120,
-      rows: 30,
+      cols: cols || 120,
+      rows: rows || 30,
       cwd,
       env: buildEnv(shellEnv, {}),
     });

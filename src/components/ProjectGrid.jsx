@@ -8,6 +8,9 @@ export default function ProjectGrid({
   onSelect,
   onStatusChange,
   onAddProject,
+  onRemove,
+  onOpenMonitor,
+  runningCount,
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -35,17 +38,33 @@ export default function ProjectGrid({
         {/* Spacer fills the drag region */}
         <div className="flex-1" style={{ WebkitAppRegion: 'drag' }} />
 
-        {/* Button — must opt out of drag */}
-        <button
-          onClick={onAddProject}
-          style={{ WebkitAppRegion: 'no-drag' }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Project
-        </button>
+        {/* Buttons — must opt out of drag */}
+        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
+          {/* Process monitor button */}
+          <button
+            onClick={onOpenMonitor}
+            className="relative flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+            </svg>
+            Processes
+            {runningCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full text-[9px] text-white font-bold flex items-center justify-center leading-none">
+                {runningCount > 9 ? '9+' : runningCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={onAddProject}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Project
+          </button>
+        </div>
       </div>
 
       {/* Grid */}
@@ -81,6 +100,7 @@ export default function ProjectGrid({
                 isSelected={selectedProject?.id === project.id}
                 onSelect={onSelect}
                 onStatusChange={onStatusChange}
+                onRemove={onRemove}
               />
             ))}
           </div>

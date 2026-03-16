@@ -5,9 +5,10 @@ function stripAnsi(str) {
   return str.replace(ANSI_RE, '');
 }
 
-export default function LogOutput({ logs, onCommand }) {
+export default function LogOutput({ logs, onCommand, runningCmd, onKill }) {
   const bottomRef = useRef(null);
   const containerRef = useRef(null);
+  const inputRef = useRef(null);
   const [cmd, setCmd] = React.useState('');
   const [autoScroll, setAutoScroll] = React.useState(true);
 
@@ -27,9 +28,20 @@ export default function LogOutput({ logs, onCommand }) {
   function handleSubmit(e) {
     e.preventDefault();
     const trimmed = cmd.trim();
-    if (trimmed && onCommand) {
+    if (!trimmed) return;
+    if (onCommand) {
       onCommand(trimmed);
       setCmd('');
+    }
+  }
+
+  function handleKeyDown(e) {
+    // Ctrl+C — kill running command
+    if (e.ctrlKey && e.key === 'c') {
+      if (runningCmd && onKill) {
+        e.preventDefault();
+        onKill();
+      }
     }
   }
 
@@ -63,18 +75,36 @@ export default function LogOutput({ logs, onCommand }) {
         <form onSubmit={handleSubmit} className="flex items-center border-t border-slate-700 bg-[#0b1120]">
           <span className="px-3 text-violet-400 font-mono text-xs select-none">$</span>
           <input
+            ref={inputRef}
             type="text"
             value={cmd}
             onChange={(e) => setCmd(e.target.value)}
-            placeholder="Run a command in project directory…"
+            onKeyDown={handleKeyDown}
+            placeholder={
+              runningCmd
+                ? `Running: ${runningCmd} — Ctrl+C to stop`
+                : 'Run a command in project directory…'
+            }
             className="flex-1 bg-transparent py-2 pr-3 text-xs font-mono text-slate-100 placeholder-slate-600 outline-none"
           />
-          <button
-            type="submit"
-            className="px-3 py-2 text-xs text-slate-400 hover:text-violet-400 transition-colors"
-          >
-            Run
-          </button>
+          {runningCmd ? (
+            <button
+              type="button"
+              onClick={onKill}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs text-orange-400 hover:text-orange-300 transition-colors font-medium"
+              title="Stop (SIGTERM)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="px-3 py-2 text-xs text-slate-400 hover:text-violet-400 transition-colors"
+            >
+              Run
+            </button>
+          )}
         </form>
       )}
     </div>

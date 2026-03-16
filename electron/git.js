@@ -40,6 +40,16 @@ async function runFile(args, cwd) {
   return stdout.trim();
 }
 
+async function runFileLong(args, cwd) {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd,
+    env: GIT_ENV,
+    timeout: 30000,
+    maxBuffer: 50 * 1024 * 1024,
+  });
+  return stdout;
+}
+
 async function getInfo(projectPath) {
   // 1. Confirm it's inside a git repo
   try {
@@ -154,4 +164,221 @@ async function checkoutBranch(projectPath, branchName) {
   }
 }
 
-module.exports = { getInfo, getBranches, checkoutBranch };
+async function getCommitLog(repoPath, limit = 100, skip = 0) {
+  try {
+    await run('git rev-parse --git-dir', repoPath);
+  } catch {
+    return { commits: [], isRepo: false };
+  }
+  try {
+    const raw = await runFile([
+      'log', '-n', String(limit), `--skip=${skip}`,
+      '--format=%x1e%H%x1f%s%x1f%an%x1f%ar%x1f%ae',
+      '--no-decorate',
+    ], repoPath);
+    if (!raw.trim()) return { commits: [], isRepo: true };
+    const commits = raw.split('\x1e').filter(Boolean).map((block) => {
+      const parts = block.trim().split('\x1f');
+      return { hash: parts[0] || '', message: parts[1] || '', author: parts[2] || '', dateRel: parts[3] || '', email: parts[4] || '' };
+    });
+    return { commits, isRepo: true };
+  } catch {
+    return { commits: [], isRepo: true };
+  }
+}
+
+async function getCommitFiles(repoPath, hash) {
+  try {
+    let parent;
+    try {
+      parent = (await runFile(['rev-parse', `${hash}^`], repoPath)).trim();
+    } catch {
+      parent = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    }
+    const [numstatRaw, nameStatusRaw] = await Promise.all([
+      runFileLong(['diff', '--numstat', parent, hash], repoPath).catch(() => ''),
+      runFile(['diff', '--name-status', '-M', parent, hash], repoPath).catch(() => ''),
+    ]);
+    const statsMap = {};
+    for (const line of numstatRaw.split('\n').filter(Boolean)) {
+      const parts = line.split('\t');
+      if (parts.length >= 3) {
+        const filename = parts.slice(2).join('\t');
+        statsMap[filename] = {
+          added: parts[0] === '-' ? 0 : (parseInt(parts[0], 10) || 0),
+          deleted: parts[1] === '-' ? 0 : (parseInt(parts[1], 10) || 0),
+        };
+      }
+    }
+    const files = [];
+    for (const line of nameStatusRaw.split('\n').filter(Boolean)) {
+      const parts = line.split('\t');
+      const type = parts[0][0];
+      const isRename = type === 'R' || type === 'C';
+      const oldPath = parts[1] || '';
+      const newPath = isRename ? (parts[2] || '') : '';
+      const displayPath = newPath || oldPath;
+      const st = statsMap[displayPath] || statsMap[oldPath] || { added: 0, deleted: 0 };
+      files.push({ type, path: displayPath, oldPath: isRename ? oldPath : null, added: st.added, deleted: st.deleted });
+    }
+    return files;
+  } catch {
+    return [];
+  }
+}
+
+async function getCommitDiff(repoPath, hash) {
+  try {
+    let parent;
+    try {
+      parent = (await runFile(['rev-parse', `${hash}^`], repoPath)).trim();
+    } catch {
+      parent = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    }
+    return await runFileLong(['diff', '--no-color', '-M', parent, hash], repoPath);
+  } catch {
+    return '';
+  }
+}
+
+const DIFF_SIZE_LIMIT = 2 * 1024 * 1024; // 2 MB cap to keep IPC fast
+
+async function getWorkingTreeDiff(repoPath) {
+  try {
+    await run('git rev-parse --git-dir', repoPath);
+  } catch {
+    return { isRepo: false, unstaged: '', staged: '' };
+  }
+  const tryDiff = async (...args) => runFileLong(args, repoPath).catch(() => '');
+  const [unstaged, staged] = await Promise.all([
+    tryDiff('diff', 'HEAD', '--no-color').then(r => r || tryDiff('diff', '--no-color')),
+    tryDiff('diff', '--cached', 'HEAD', '--no-color').then(r => r || tryDiff('diff', '--cached', '--no-color')),
+  ]);
+  // Truncate to avoid sending huge payloads over IPC
+  const truncate = (s) => s.length > DIFF_SIZE_LIMIT
+    ? s.slice(0, DIFF_SIZE_LIMIT) + '\n\n[diff truncated — too large to display]\n'
+    : s;
+  return { isRepo: true, unstaged: truncate(unstaged), staged: truncate(staged) };
+}
+
+// Returns structured list of changed files with staging status
+// Format: [{ path, x (staged status), y (unstaged status), isStaged, isUnstaged, isUntracked }]
+async function createBranch(repoPath, branchName, setUpstream) {
+  try {
+    // Create and switch to new branch from current HEAD
+    await runFile(['checkout', '-b', branchName], repoPath);
+    if (setUpstream) {
+      // Push and set upstream: git push -u origin <branch>
+      const { stderr } = await execAsync(`git push -u origin "${branchName.replace(/"/g, '\\"')}"`, {
+        cwd: repoPath, env: GIT_ENV, timeout: 30000,
+      }).catch((err) => ({ stderr: err.stderr || err.message }));
+      // stderr is normal for git push (progress output) — only fail on non-zero exit
+      // execAsync rejects on non-zero, so if we got here the push succeeded
+      void stderr;
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err.stderr || err.message || String(err)).trim() };
+  }
+}
+
+async function getStagingStatus(repoPath) {
+  try {
+    await run('git rev-parse --git-dir', repoPath);
+  } catch {
+    return { isRepo: false, files: [], branch: null };
+  }
+  let branch = null;
+  try { branch = await run('git symbolic-ref --short HEAD', repoPath); } catch {}
+
+  let files = [];
+  try {
+    const raw = await runFile(['status', '--porcelain=v1', '-u'], repoPath);
+    for (const line of raw.split('\n').filter(Boolean)) {
+      const x = line[0]; // staged
+      const y = line[1]; // unstaged
+      let filePath = line.slice(3);
+      // Handle renames: "old -> new"
+      if (filePath.includes(' -> ')) filePath = filePath.split(' -> ')[1];
+      files.push({
+        path: filePath,
+        x,
+        y,
+        isStaged: x !== ' ' && x !== '?',
+        isUnstaged: y !== ' ',
+        isUntracked: x === '?' && y === '?',
+      });
+    }
+  } catch {}
+  return { isRepo: true, files, branch };
+}
+
+async function stageFile(repoPath, filePath) {
+  try {
+    await runFile(['add', '--', filePath], repoPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function unstageFile(repoPath, filePath) {
+  try {
+    // git restore --staged works for Git 2.23+; fall back to git reset HEAD
+    try {
+      await runFile(['restore', '--staged', '--', filePath], repoPath);
+    } catch {
+      await runFile(['reset', 'HEAD', '--', filePath], repoPath);
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function stageAll(repoPath) {
+  try {
+    await runFile(['add', '-A'], repoPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function unstageAll(repoPath) {
+  try {
+    try {
+      await runFile(['restore', '--staged', '.'], repoPath);
+    } catch {
+      await runFile(['reset', 'HEAD'], repoPath);
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function commitChanges(repoPath, summary, description) {
+  try {
+    const message = description ? `${summary}\n\n${description}` : summary;
+    await runFile(['commit', '-m', message], repoPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function pushChanges(repoPath) {
+  try {
+    const { stdout, stderr } = await execAsync('git push', {
+      cwd: repoPath, env: GIT_ENV, timeout: 30000,
+    });
+    return { success: true, output: stdout + stderr };
+  } catch (err) {
+    // git push sometimes writes progress to stderr but still succeeds
+    const output = (err.stdout || '') + (err.stderr || '');
+    return { success: false, error: err.message, output };
+  }
+}
+
+module.exports = { getInfo, getBranches, checkoutBranch, createBranch, getCommitLog, getCommitFiles, getCommitDiff, getWorkingTreeDiff, getStagingStatus, stageFile, unstageFile, stageAll, unstageAll, commitChanges, pushChanges };

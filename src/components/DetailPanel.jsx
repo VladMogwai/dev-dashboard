@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import LogOutput from './LogOutput';
 import Terminal from './Terminal';
-import ClaudeTab from './ClaudeTab';
 import BranchSwitcher from './BranchSwitcher';
 import TerminalMenu from './TerminalMenu';
+import GitHistoryTab from './git/GitHistoryTab';
+import PortBadge from './PortBadge';
 import { useProcess } from '../hooks/useProcess';
 import {
   startProcess,
   stopProcess,
   restartProcess,
   getInstalledEditors,
+  getRunningEditors,
   openInEditor,
-  openClaudeExternal,
   getGitInfo,
+  updateProject,
 } from '../ipc';
 
 const EDITOR_LABELS = {
@@ -21,6 +23,35 @@ const EDITOR_LABELS = {
   zed: 'Zed',
   webstorm: 'WebStorm',
 };
+
+const EDITOR_COMMANDS = {
+  vscode: 'code',
+  cursor: 'cursor',
+  zed: 'zed',
+  webstorm: 'open -a WebStorm',
+};
+
+function Tooltip({ label, sub, children }) {
+  const [visible, setVisible] = React.useState(false);
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {children}
+      {visible && label && (
+        <div className="absolute top-full left-0 mt-1.5 z-50 pointer-events-none" style={{ minWidth: 160, maxWidth: 300 }}>
+          <div className="w-2 h-2 bg-[#161b22] border-t border-l border-slate-700/60 rotate-45 ml-3 mb-[-5px] relative z-10" />
+          <div className="bg-[#161b22] border border-slate-700/60 rounded-lg px-3 py-2 shadow-xl">
+            <div className="text-xs font-mono text-violet-300 break-all">{label}</div>
+            {sub && <div className="text-[10px] text-slate-600 mt-1 break-all">{sub}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const STATUS_COLORS = {
   running: 'bg-emerald-500',
@@ -37,9 +68,12 @@ const STATUS_LABELS = { running: 'Running', stopped: 'Stopped', error: 'Error' }
 export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
   const [activeTab, setActiveTab] = useState('Logs');
   const [installedEditors, setInstalledEditors] = useState([]);
+  const [runningEditors, setRunningEditors] = useState([]);
   const [localGitInfo, setLocalGitInfo] = useState(gitInfo || {});
+  const [editingCmd, setEditingCmd] = useState(false);
+  const [cmdValue, setCmdValue] = useState('');
 
-  const { logs, clearLogs, run } = useProcess(project.id);
+  const { logs, clearLogs, run, killCmd, runningCmd } = useProcess(project.id);
   const status = project.status || 'stopped';
 
   // Keep local git info in sync with prop updates
@@ -51,6 +85,15 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
     getInstalledEditors().then(setInstalledEditors);
   }, []);
 
+  // Poll which editors are currently running every 4s
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => getRunningEditors(project.path).then((r) => { if (!cancelled) setRunningEditors(r); }).catch(() => {});
+    poll();
+    const t = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [project.path]);
+
   // Reset to Logs tab whenever project changes
   useEffect(() => {
     setActiveTab('Logs');
@@ -58,11 +101,6 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
 
   function handleTabChange(tab) {
     setActiveTab(tab);
-  }
-
-  // ClaudeTab now owns the not-installed state — just switch to the tab
-  function handleOpenClaudeTab() {
-    setActiveTab('Claude');
   }
 
   // Refresh git info after a branch checkout
@@ -135,68 +173,123 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
             <span className="truncate">{git.lastCommit.message}</span>
           </div>
         )}
+        <PortBadge
+          project={project}
+          isRunning={status === 'running'}
+        />
       </div>
 
       {/* ── Controls ─────────────────────────────────────────── */}
       <div className="px-4 py-2.5 border-b border-slate-700/60 flex flex-wrap items-center gap-2">
-        {/* Process controls */}
-        {status !== 'running' ? (
-          <button
-            onClick={() => startProcess(project.id)}
-            className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-xs font-medium rounded-lg border border-emerald-600/30 transition-colors"
+        {/* Start command inline editor */}
+        {editingCmd ? (
+          <form
+            className="flex items-center gap-1.5 flex-1 min-w-0"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const v = cmdValue.trim();
+              if (v) await updateProject(project.id, { startCommand: v });
+              setEditingCmd(false);
+            }}
           >
-            ▶ Start
-          </button>
+            <input
+              autoFocus
+              value={cmdValue}
+              onChange={(e) => setCmdValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setEditingCmd(false); }}
+              onBlur={async () => {
+                const v = cmdValue.trim();
+                if (v) await updateProject(project.id, { startCommand: v });
+                setEditingCmd(false);
+              }}
+              className="flex-1 min-w-0 px-2 py-1 bg-slate-800 border border-violet-500/60 rounded-lg text-xs font-mono text-slate-200 outline-none"
+              placeholder="e.g. npm run dev"
+            />
+            <button type="submit" className="px-2 py-1 bg-violet-600/30 hover:bg-violet-600/50 text-violet-300 text-xs rounded-lg border border-violet-600/40 transition-colors flex-shrink-0">
+              Save
+            </button>
+            <button type="button" onClick={() => setEditingCmd(false)} className="px-2 py-1 text-slate-500 hover:text-slate-300 text-xs transition-colors flex-shrink-0">
+              Cancel
+            </button>
+          </form>
         ) : (
-          <button
-            onClick={() => stopProcess(project.id)}
-            className="px-3 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-medium rounded-lg border border-red-600/30 transition-colors"
-          >
-            ■ Stop
-          </button>
+          <>
+            {/* Process controls */}
+            {status !== 'running' ? (
+              <Tooltip label={project.startCommand} sub="Starts the dev process">
+                <button
+                  onClick={() => startProcess(project.id)}
+                  className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-xs font-medium rounded-lg border border-emerald-600/30 transition-colors"
+                >
+                  ▶ Start
+                </button>
+              </Tooltip>
+            ) : (
+              <Tooltip label="kill -SIGTERM <pid>" sub="Stops the running process">
+                <button
+                  onClick={() => stopProcess(project.id)}
+                  className="px-3 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-medium rounded-lg border border-red-600/30 transition-colors"
+                >
+                  ■ Stop
+                </button>
+              </Tooltip>
+            )}
+            {/* Edit start command */}
+            <Tooltip label={project.startCommand} sub="Click to edit start command">
+              <button
+                onClick={() => { setCmdValue(project.startCommand || ''); setEditingCmd(true); }}
+                className="px-2 py-1 text-slate-600 hover:text-slate-300 hover:bg-slate-700 text-xs rounded-lg transition-colors"
+                title="Edit start command"
+              >
+                ✎
+              </button>
+            </Tooltip>
+          </>
         )}
-        <button
-          onClick={() => restartProcess(project.id)}
-          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors"
-        >
-          ↺ Restart
-        </button>
+        {!editingCmd && (
+          <>
+            <Tooltip label={project.startCommand} sub="Stop + restart the process">
+              <button
+                onClick={() => restartProcess(project.id)}
+                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors"
+              >
+                ↺ Restart
+              </button>
+            </Tooltip>
 
-        {/* Editor buttons */}
-        {installedEditors.map((editor) => (
-          <button
-            key={editor}
-            onClick={() => openInEditor(editor, project.path)}
-            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors"
-          >
-            {EDITOR_LABELS[editor]}
-          </button>
-        ))}
+            {/* Editor buttons */}
+            {installedEditors.map((editor) => {
+              const isOpen = runningEditors.includes(editor);
+              return (
+                <Tooltip
+                  key={editor}
+                  label={isOpen ? `${EDITOR_LABELS[editor]} is running` : `Open in ${EDITOR_LABELS[editor]}`}
+                  sub={isOpen ? 'Click to bring to front' : project.path}
+                >
+                  <button
+                    onClick={() => openInEditor(editor, project.path)}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-colors border ${
+                      isOpen
+                        ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-600/30'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-500 border-slate-700 hover:text-slate-300'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                    {EDITOR_LABELS[editor]}
+                  </button>
+                </Tooltip>
+              );
+            })}
 
-        {/* External terminal launcher */}
-        <TerminalMenu projectPath={project.path} />
-
-        {/* Claude Code — always active; ClaudeTab handles not-installed state */}
-        <div className="relative flex items-center gap-1 ml-auto">
-          <button
-            onClick={handleOpenClaudeTab}
-            className="px-3 py-1 text-xs font-medium rounded-lg border transition-colors bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 border-violet-600/30"
-          >
-            Claude Code
-          </button>
-          <button
-            onClick={() => openClaudeExternal(project.path)}
-            title="Open in external terminal"
-            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-400 text-xs rounded-lg transition-colors"
-          >
-            ↗
-          </button>
-        </div>
+            {/* External terminal launcher */}
+            <TerminalMenu projectPath={project.path} />
+          </>
+        )}
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────── */}
       <div className="flex items-center border-b border-slate-700/60 px-4 flex-shrink-0">
-        {['Logs', 'Terminal', 'Claude'].map((tab) => (
+        {['Logs', 'Terminal', 'Git'].map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabChange(tab)}
@@ -236,7 +329,12 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
 
         {/* Logs */}
         <div className={`h-full ${activeTab === 'Logs' ? 'flex flex-col' : 'hidden'}`}>
-          <LogOutput logs={logs} onCommand={(cmd) => run(cmd)} />
+          <LogOutput
+            logs={logs}
+            onCommand={(cmd) => run(cmd)}
+            runningCmd={runningCmd}
+            onKill={killCmd}
+          />
         </div>
 
         {/* Terminal — embedded xterm */}
@@ -247,17 +345,17 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
           <Terminal
             key={project.id + '-terminal'}
             projectId={project.id}
+            project={project}
             type="terminal"
             active={activeTab === 'Terminal'}
           />
         </div>
 
-        {/* Claude tab — ClaudeTab owns the not-installed state */}
-        <div className={`h-full ${activeTab === 'Claude' ? 'flex flex-col' : 'hidden'}`}>
-          <ClaudeTab
-            projectId={project.id}
-            projectPath={project.path}
-            active={activeTab === 'Claude'}
+        {/* Git History tab */}
+        <div className={`h-full ${activeTab === 'Git' ? 'flex flex-col' : 'hidden'}`}>
+          <GitHistoryTab
+            project={project}
+            active={activeTab === 'Git'}
           />
         </div>
       </div>

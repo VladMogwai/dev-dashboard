@@ -11,6 +11,8 @@ const DEFAULTS = {
   preferredTerminal: null,
   customTerminals: [],
   // customTerminals items: { id, name, appPath, extraPath, openCommand? }
+  // killOnQuit: null = ask every time, true = always kill, false = never kill
+  killOnQuit: null,
 };
 
 function getPath() {
