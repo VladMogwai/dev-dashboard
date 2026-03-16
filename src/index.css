@@ -44,9 +44,4 @@ html, body, #root {
   background: #475569;
 }
 
-/* Traffic light spacing */
-.titlebar-spacer {
-  -webkit-app-region: drag;
-  height: 44px;
-  min-height: 44px;
-}
+/* Remove — drag regions are handled inline per component */
