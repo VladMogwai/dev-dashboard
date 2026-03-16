@@ -356,25 +356,18 @@ function ScriptButton({ name, command, fullCommand, isRunning, onClick, onStop, 
       )}
 
       {/* Tooltip */}
-      {tooltipVisible && (
+      {tooltipVisible && fullCommand && (
         <div
-          className="absolute bottom-full left-0 mb-2 z-50 pointer-events-none"
-          style={{ minWidth: 160, maxWidth: 280 }}
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none"
+          style={{ width: 200 }}
         >
-          <div className="bg-[#161b22] border border-slate-700/60 rounded-lg px-3 py-2 shadow-xl">
-            <div className="text-[10px] font-medium text-slate-500 mb-0.5 uppercase tracking-wider">Command</div>
-            <div className="text-xs font-mono text-violet-300 break-all">{command}</div>
-            {fullCommand && (
-              <>
-                <div className="text-[10px] font-medium text-slate-600 mt-1.5 mb-0.5 uppercase tracking-wider">Script</div>
-                <div className="text-xs font-mono text-slate-400 break-all">{fullCommand}</div>
-              </>
-            )}
-            {isRunning && (
-              <div className="text-[10px] text-orange-400 mt-1.5">Click to stop (SIGTERM)</div>
-            )}
+          <div className="bg-[#161b22] border border-slate-700/60 rounded-lg px-2.5 py-2 shadow-xl">
+            <div className="text-[10px] font-medium text-slate-500 mb-0.5 uppercase tracking-wider">Script</div>
+            <div className="text-[10px] font-mono text-slate-400 break-all line-clamp-3">
+              {fullCommand.length > 80 ? fullCommand.slice(0, 80) + '…' : fullCommand}
+            </div>
           </div>
-          <div className="w-2 h-2 bg-[#161b22] border-b border-r border-slate-700/60 rotate-45 ml-3 -mt-1" />
+          <div className="w-2 h-2 bg-[#161b22] border-b border-r border-slate-700/60 rotate-45 mx-auto -mt-1" />
         </div>
       )}
     </div>
