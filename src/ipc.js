@@ -25,6 +25,11 @@ export const checkClaude = () => api.checkClaude();
 export const openClaudeExternal = (path) => api.openClaudeExternal(path);
 export const openFolderDialog = () => api.openFolderDialog();
 
+export const getInstalledTerminals = () => api.getInstalledTerminals();
+export const openInTerminal = (terminalId, path) => api.openInTerminal(terminalId, path);
+export const getSettings = () => api.getSettings();
+export const setSettings = (updates) => api.setSettings(updates);
+
 // Event listener helpers — each returns an unsubscribe function
 export const onLogOutput = (cb) => api.onLogOutput(cb);
 export const onPtyOutput = (cb) => api.onPtyOutput(cb);

@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkClaude: () => ipcRenderer.invoke('claude:check'),
   openClaudeExternal: (projectPath) => ipcRenderer.invoke('claude:open-external', projectPath),
 
+  // Terminals
+  getInstalledTerminals: () => ipcRenderer.invoke('terminals:get-installed'),
+  openInTerminal: (terminalId, projectPath) => ipcRenderer.invoke('terminal:open', terminalId, projectPath),
+
+  // Settings
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (updates) => ipcRenderer.invoke('settings:set', updates),
+
   // Dialog
   openFolderDialog: () => ipcRenderer.invoke('dialog:open-folder'),
 

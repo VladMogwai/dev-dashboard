@@ -8,6 +8,8 @@ const processManager = require('./processes');
 const ptyManager = require('./pty');
 const gitManager = require('./git');
 const editorManager = require('./editors');
+const terminalManager = require('./terminals');
+const settings = require('./settings');
 
 const isDev = !app.isPackaged;
 
@@ -96,6 +98,7 @@ function startGitPolling() {
 app.whenReady().then(() => {
   projectsFilePath = getProjectsFilePath();
   loadProjects();
+  settings.load();
   createWindow();
   startGitPolling();
 
@@ -303,6 +306,31 @@ ipcMain.handle('claude:open-external', async (_, projectPath) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+// ─── IPC: Terminals ───────────────────────────────────────────────────────────
+
+ipcMain.handle('terminals:get-installed', async () => {
+  return terminalManager.getInstalled();
+});
+
+ipcMain.handle('terminal:open', async (_, terminalId, projectPath) => {
+  try {
+    await terminalManager.openInTerminal(terminalId, projectPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// ─── IPC: Settings ────────────────────────────────────────────────────────────
+
+ipcMain.handle('settings:get', () => {
+  return settings.get();
+});
+
+ipcMain.handle('settings:set', (_, updates) => {
+  return settings.set(updates);
 });
 
 // ─── IPC: Dialog ──────────────────────────────────────────────────────────────

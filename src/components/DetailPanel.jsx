@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import LogOutput from './LogOutput';
 import Terminal from './Terminal';
+import TerminalLauncher from './TerminalLauncher';
 import { useProcess } from '../hooks/useProcess';
 import {
   startProcess,
@@ -232,13 +233,11 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
           <LogOutput logs={logs} onCommand={(cmd) => run(cmd)} />
         </div>
 
-        {/* Terminal */}
-        <div className={`h-full ${activeTab === 'Terminal' ? 'block' : 'hidden'}`}>
-          <Terminal
-            key={`term-${project.id}`}
-            projectId={project.id}
-            type="terminal"
-            active={activeTab === 'Terminal'}
+        {/* Terminal — external launcher */}
+        <div className={`h-full overflow-hidden ${activeTab === 'Terminal' ? 'block' : 'hidden'}`}>
+          <TerminalLauncher
+            projectPath={project.path}
+            projectName={project.name}
           />
         </div>
 
