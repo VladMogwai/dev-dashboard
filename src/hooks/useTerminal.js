@@ -1,17 +1,70 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import { createPty, ptyInput, ptyResize, destroyPty, onPtyOutput } from '../ipc';
 
-export function useTerminal(containerRef, projectId, type, active) {
+const termConfig = {
+  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  fontSize: 13,
+  lineHeight: 1.3,
+  theme: {
+    background: '#0d1117',
+    foreground: '#e6edf3',
+    cursor: '#58a6ff',
+    selectionBackground: '#264f78',
+    black: '#0d1117',
+    red: '#ff7b72',
+    green: '#3fb950',
+    yellow: '#d29922',
+    blue: '#58a6ff',
+    magenta: '#bc8cff',
+    cyan: '#39c5cf',
+    white: '#b1bac4',
+    brightBlack: '#6e7681',
+    brightRed: '#ffa198',
+    brightGreen: '#56d364',
+    brightYellow: '#e3b341',
+    brightBlue: '#79c0ff',
+    brightMagenta: '#d2a8ff',
+    brightCyan: '#56d4dd',
+    brightWhite: '#f0f6fc',
+  },
+  cursorBlink: true,
+  scrollback: 5000,
+  allowTransparency: false,
+  macOptionIsMeta: true,
+  macOptionClickForcesSelection: true,
+  rightClickSelectsWord: true,
+};
+
+/**
+ * useTerminal(containerRef, projectId, type, active, options)
+ *
+ * options:
+ *   onReady(api)   — called once the terminal + PTY are ready; api = { sendInput }
+ *   claudeMode     — reserved for future use
+ */
+export function useTerminal(containerRef, projectId, type, active, options = {}) {
+  const { onReady } = options;
+
   const termRef = useRef(null);
   const fitAddonRef = useRef(null);
+  const searchAddonRef = useRef(null);
   const sessionIdRef = useRef(null);
   const unsubRef = useRef(null);
   const initializedRef = useRef(false);
   const resizeObserverRef = useRef(null);
+  const onReadyRef = useRef(onReady);
 
-  // Fit with retry — waits until container has non-zero dimensions
+  // Keep onReady ref fresh without triggering re-renders
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  });
+
+  // ── Fit with retry — waits until container has non-zero dimensions ──────────
+
   const fitWhenReady = useCallback(() => {
     if (!fitAddonRef.current || !containerRef.current) return;
 
@@ -24,7 +77,6 @@ export function useTerminal(containerRef, projectId, type, active) {
           fitAddonRef.current && fitAddonRef.current.fit();
         } catch (_) {}
       } else {
-        // Container not laid out yet — try again next frame
         requestAnimationFrame(attempt);
       }
     };
@@ -32,62 +84,85 @@ export function useTerminal(containerRef, projectId, type, active) {
     requestAnimationFrame(attempt);
   }, [containerRef]);
 
+  // ── Keyboard handler ───────────────────────────────────────────────────────
+
+  function makeKeyHandler(term) {
+    return (event) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const modifier = isMac ? event.metaKey : event.ctrlKey;
+
+      if (!modifier) return true;
+
+      switch (event.key) {
+        case 'c': {
+          const selection = term.getSelection();
+          if (selection) {
+            navigator.clipboard.writeText(selection).catch(() => {});
+            return false;
+          }
+          // No selection — send SIGINT
+          if (sessionIdRef.current) {
+            ptyInput(sessionIdRef.current, '\x03');
+          }
+          return false;
+        }
+
+        case 'v': {
+          navigator.clipboard.readText().then((text) => {
+            if (text && sessionIdRef.current) {
+              ptyInput(sessionIdRef.current, text);
+            }
+          }).catch(() => {});
+          return false;
+        }
+
+        case 'k': {
+          // Clear screen
+          if (sessionIdRef.current) {
+            ptyInput(sessionIdRef.current, '\x1b[H\x1b[2J');
+          }
+          return false;
+        }
+
+        default:
+          return true;
+      }
+    };
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+
   const init = useCallback(async () => {
     if (!containerRef.current || initializedRef.current) return;
     initializedRef.current = true;
 
-    // Create xterm instance
-    const term = new Terminal({
-      theme: {
-        background: '#0b1120',
-        foreground: '#e2e8f0',
-        cursor: '#94a3b8',
-        selectionBackground: '#334155',
-        black: '#1e293b',
-        red: '#f87171',
-        green: '#4ade80',
-        yellow: '#facc15',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#22d3ee',
-        white: '#e2e8f0',
-        brightBlack: '#475569',
-        brightRed: '#fca5a5',
-        brightGreen: '#86efac',
-        brightYellow: '#fde047',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#f8fafc',
-      },
-      fontFamily: 'JetBrains Mono, Fira Code, Menlo, Monaco, Consolas, monospace',
-      fontSize: 13,
-      lineHeight: 1.4,
-      cursorBlink: true,
-      allowTransparency: false,
-      scrollback: 10000,
-    });
+    // Create xterm instance with full config
+    const term = new Terminal(termConfig);
 
+    // Load addons
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
+    const searchAddon = new SearchAddon();
+
     term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.loadAddon(searchAddon);
+
     term.open(containerRef.current);
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    searchAddonRef.current = searchAddon;
+
+    // Attach custom key handler
+    term.attachCustomKeyEventHandler(makeKeyHandler(term));
 
     // Fit once container has real dimensions
     fitWhenReady();
 
     // Watch for container size changes and re-fit
     const observer = new ResizeObserver(() => {
-      if (fitAddonRef.current && containerRef.current) {
-        const { offsetWidth, offsetHeight } = containerRef.current;
-        if (offsetWidth > 0 && offsetHeight > 0) {
-          try {
-            fitAddonRef.current.fit();
-          } catch (_) {}
-        }
-      }
+      fitWhenReady();
     });
     if (containerRef.current) {
       observer.observe(containerRef.current);
@@ -123,19 +198,32 @@ export function useTerminal(containerRef, projectId, type, active) {
         ptyResize(sessionIdRef.current, cols, rows);
       }
     });
-  }, [containerRef, projectId, type, fitWhenReady]);
 
-  // Initialize when first activated; re-fit on subsequent activations
+    // Notify parent that terminal is ready
+    const sendInputFn = (text) => {
+      if (sessionIdRef.current) {
+        ptyInput(sessionIdRef.current, text);
+      }
+    };
+
+    if (onReadyRef.current) {
+      onReadyRef.current({ sendInput: sendInputFn });
+    }
+  }, [containerRef, projectId, type, fitWhenReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Activate / re-fit ─────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!active) return;
 
     if (!initializedRef.current) {
       init();
     } else {
-      // Terminal already exists — just re-fit since the tab became visible
       fitWhenReady();
     }
   }, [active, init, fitWhenReady]);
+
+  // ── Public API ────────────────────────────────────────────────────────────
 
   const dispose = useCallback(() => {
     if (resizeObserverRef.current) {
@@ -147,6 +235,7 @@ export function useTerminal(containerRef, projectId, type, active) {
     if (termRef.current) termRef.current.dispose();
     termRef.current = null;
     fitAddonRef.current = null;
+    searchAddonRef.current = null;
     sessionIdRef.current = null;
     initializedRef.current = false;
   }, []);
@@ -161,5 +250,5 @@ export function useTerminal(containerRef, projectId, type, active) {
     fitWhenReady();
   }, [fitWhenReady]);
 
-  return { dispose, sendInput, fit };
+  return { dispose, sendInput, fit, searchAddon: searchAddonRef.current };
 }

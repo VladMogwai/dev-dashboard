@@ -70,4 +70,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('git:update', handler);
     return () => ipcRenderer.removeListener('git:update', handler);
   },
+  onXcodeCltMissing: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('system:xcode-clt-missing', handler);
+    return () => ipcRenderer.removeListener('system:xcode-clt-missing', handler);
+  },
 });

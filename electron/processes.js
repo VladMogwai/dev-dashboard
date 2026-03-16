@@ -4,7 +4,9 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Electron strips PATH — prepend all common macOS binary locations
+const ptyManager = require('./pty');
+
+// Fallback PATH for when the shell env hasn't been captured yet
 const FULL_PATH = [
   '/usr/local/bin',
   '/opt/homebrew/bin',
@@ -15,6 +17,7 @@ const FULL_PATH = [
   '/sbin',
   process.env.PATH || '',
 ].join(':');
+
 const treeKill = require('tree-kill');
 
 // Map of projectId -> { process, status }
@@ -79,10 +82,13 @@ function start(project, onData, onStatusChange) {
   const args = parts.slice(1);
   const envVars = loadEnv(project.envFile);
 
+  // Use captured shell env (nvm, fnm, pyenv, etc.) with fallback to FULL_PATH
+  const shellEnv = ptyManager.getCapturedEnv();
   const env = {
+    ...shellEnv,
     ...process.env,
-    PATH: FULL_PATH,
-    ...envVars,       // project .env overrides go on top
+    PATH: shellEnv.PATH || FULL_PATH,
+    ...envVars,
     FORCE_COLOR: '1',
   };
 
@@ -139,9 +145,18 @@ function runCommand(project, command, onData) {
   const cmd = parts[0];
   const args = parts.slice(1);
 
+  // Use captured shell env (nvm, fnm, pyenv, etc.) with fallback to FULL_PATH
+  const shellEnv = ptyManager.getCapturedEnv();
+  const env = {
+    ...shellEnv,
+    ...process.env,
+    PATH: shellEnv.PATH || FULL_PATH,
+    FORCE_COLOR: '1',
+  };
+
   const child = spawn(cmd, args, {
     cwd: project.path,
-    env: { ...process.env, PATH: FULL_PATH, FORCE_COLOR: '1' },
+    env,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

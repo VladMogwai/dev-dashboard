@@ -1,8 +1,12 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs');
+
+const execAsync = promisify(exec);
 
 const processManager = require('./processes');
 const ptyManager = require('./pty');
@@ -101,6 +105,17 @@ app.whenReady().then(() => {
   settings.load();
   createWindow();
   startGitPolling();
+
+  // Check Xcode CLT asynchronously after window is created
+  setTimeout(async () => {
+    try {
+      await execAsync('xcode-select -p', { timeout: 3000 });
+    } catch {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('system:xcode-clt-missing');
+      }
+    }
+  }, 2000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

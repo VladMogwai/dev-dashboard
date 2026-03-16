@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import LogOutput from './LogOutput';
 import Terminal from './Terminal';
+import ClaudeTab from './ClaudeTab';
 import BranchSwitcher from './BranchSwitcher';
 import TerminalMenu from './TerminalMenu';
 import { useProcess } from '../hooks/useProcess';
@@ -10,7 +11,6 @@ import {
   restartProcess,
   getInstalledEditors,
   openInEditor,
-  checkClaude,
   openClaudeExternal,
   getGitInfo,
 } from '../ipc';
@@ -37,10 +37,7 @@ const STATUS_LABELS = { running: 'Running', stopped: 'Stopped', error: 'Error' }
 export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
   const [activeTab, setActiveTab] = useState('Logs');
   const [installedEditors, setInstalledEditors] = useState([]);
-  const [claudeAvailable, setClaudeAvailable] = useState(false);
-  const [claudeTooltip, setClaudeTooltip] = useState(false);
   const [localGitInfo, setLocalGitInfo] = useState(gitInfo || {});
-  const claudeTermRef = useRef(null);
 
   const { logs, clearLogs, run } = useProcess(project.id);
   const status = project.status || 'stopped';
@@ -52,7 +49,6 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
 
   useEffect(() => {
     getInstalledEditors().then(setInstalledEditors);
-    checkClaude().then(setClaudeAvailable);
   }, []);
 
   // Reset to Logs tab whenever project changes
@@ -60,23 +56,12 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
     setActiveTab('Logs');
   }, [project.id]);
 
-  const handleClaudeTabReady = useCallback(({ sendInput }) => {
-    claudeTermRef.current = sendInput;
-    if (claudeAvailable) {
-      setTimeout(() => sendInput('claude\n'), 400);
-    }
-  }, [claudeAvailable]);
-
   function handleTabChange(tab) {
     setActiveTab(tab);
   }
 
+  // ClaudeTab now owns the not-installed state — just switch to the tab
   function handleOpenClaudeTab() {
-    if (!claudeAvailable) {
-      setClaudeTooltip(true);
-      setTimeout(() => setClaudeTooltip(false), 3500);
-      return;
-    }
     setActiveTab('Claude');
   }
 
@@ -191,15 +176,11 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
         {/* External terminal launcher */}
         <TerminalMenu projectPath={project.path} />
 
-        {/* Claude Code */}
+        {/* Claude Code — always active; ClaudeTab handles not-installed state */}
         <div className="relative flex items-center gap-1 ml-auto">
           <button
             onClick={handleOpenClaudeTab}
-            className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
-              claudeAvailable
-                ? 'bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 border-violet-600/30'
-                : 'bg-slate-700/50 text-slate-500 border-slate-600/30'
-            }`}
+            className="px-3 py-1 text-xs font-medium rounded-lg border transition-colors bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 border-violet-600/30"
           >
             Claude Code
           </button>
@@ -210,13 +191,6 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
           >
             ↗
           </button>
-          {claudeTooltip && (
-            <div className="absolute right-0 top-9 z-50 bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded-lg px-3 py-2.5 shadow-2xl whitespace-nowrap">
-              Not installed — run:
-              <br />
-              <span className="font-mono text-violet-400">npm i -g @anthropic-ai/claude-code</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -278,28 +252,13 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove }) {
           />
         </div>
 
-        {/* Claude */}
-        <div
-          className={`h-full overflow-hidden ${activeTab === 'Claude' ? 'flex flex-col' : 'hidden'}`}
-          style={{ minHeight: 0 }}
-        >
-          {!claudeAvailable && (
-            <div className="p-5 text-xs text-slate-400 space-y-2 border-b border-slate-700/60 flex-shrink-0">
-              <p className="text-slate-300 font-medium">Claude Code is not installed.</p>
-              <code className="block bg-slate-800 rounded-lg px-3 py-2 font-mono text-violet-400">
-                npm install -g @anthropic-ai/claude-code
-              </code>
-            </div>
-          )}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <Terminal
-              key={project.id + '-claude'}
-              projectId={project.id}
-              type="claude"
-              active={activeTab === 'Claude'}
-              onReady={handleClaudeTabReady}
-            />
-          </div>
+        {/* Claude tab — ClaudeTab owns the not-installed state */}
+        <div className={`h-full ${activeTab === 'Claude' ? 'flex flex-col' : 'hidden'}`}>
+          <ClaudeTab
+            projectId={project.id}
+            projectPath={project.path}
+            active={activeTab === 'Claude'}
+          />
         </div>
       </div>
     </div>
