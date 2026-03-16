@@ -188,8 +188,8 @@ export default function ProjectTile({ project, gitInfo, isSelected, onSelect, on
 
       {/* Buttons row */}
       <div className="flex flex-wrap gap-1.5 pt-0.5">
-        {/* Start / Stop + edit command */}
-        {editingCmd ? (
+        {/* Start / Stop + edit command — only shown when a start command is configured */}
+        {startCmd && (editingCmd ? (
           <form
             className="flex items-center gap-1 w-full"
             onClick={(e) => e.stopPropagation()}
@@ -241,7 +241,7 @@ export default function ProjectTile({ project, gitInfo, isSelected, onSelect, on
               ✎
             </button>
           </div>
-        )}
+        ))}
 
         {/* npm scripts */}
         {extraScripts.map((s) => (

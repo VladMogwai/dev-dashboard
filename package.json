@@ -1,6 +1,6 @@
 {
   "name": "dev-dashboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Developer Project Dashboard — like Docker Desktop for local dev projects",
   "main": "electron/main.js",
   "scripts": {
@@ -16,17 +16,28 @@
     "asarUnpack": [
       "**/node_modules/node-pty/**"
     ],
+    "compression": "maximum",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "files": [
       "dist/**",
       "electron/**",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/__tests__/**"
     ]
   },
   "dependencies": {
