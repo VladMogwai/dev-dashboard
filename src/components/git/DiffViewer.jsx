@@ -8,13 +8,17 @@ const MIN_FILE_HEIGHT = 40;
 const MAX_FILE_HEIGHT = 400;
 const DEFAULT_FILE_HEIGHT = 160;
 
-export default function DiffViewer({ commit, files, diff, loading, isChanges }) {
+export default function DiffViewer({ commit, files, diff, loading, isChanges, onReady }) {
   const diffContentRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [fileListHeight, setFileListHeight] = useState(DEFAULT_FILE_HEIGHT);
   const dragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
+
+  useEffect(() => {
+    if (onReady) onReady((path) => diffContentRef.current?.scrollToFile(path));
+  }, [onReady]);
 
   const onDragMouseDown = useCallback((e) => {
     e.preventDefault();
@@ -103,8 +107,8 @@ export default function DiffViewer({ commit, files, diff, loading, isChanges }) 
         )}
       </div>
 
-      {/* File list — resizable height */}
-      {hasFiles && (
+      {/* File list — only for commit history, not working tree */}
+      {hasFiles && !isChanges && (
         <>
           <div style={{ height: fileListHeight, minHeight: MIN_FILE_HEIGHT, flexShrink: 0, overflow: 'hidden' }}>
             <FileList files={files} onClickFile={(path) => diffContentRef.current?.scrollToFile(path)} />

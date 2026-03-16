@@ -4,6 +4,7 @@ import {
   gitStageFile, gitUnstageFile,
   gitStageAll, gitUnstageAll,
   gitCommit, gitPush, gitPull,
+  getBranches,
 } from '../../ipc';
 
 const STATUS_LABEL = { M: 'M', A: 'A', D: 'D', R: 'R', C: 'C', '?': '?' };
@@ -16,11 +17,13 @@ const STATUS_COLOR = {
   '?': 'text-slate-500',
 };
 
-function FileRow({ file, onStage, onUnstage, loading }) {
+function FileRow({ file, onStage, onUnstage, loading, diffStats, onDiffSelect }) {
   const statusChar = file.isUntracked ? '?' : (file.isStaged ? file.x : file.y);
   const colorClass = STATUS_COLOR[statusChar] || 'text-slate-400';
   const isAdding = loading === 'stage-' + file.path;
   const isRemoving = loading === 'unstage-' + file.path;
+  const added = diffStats?.added || 0;
+  const deleted = diffStats?.deleted || 0;
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-800/40 group transition-colors">
@@ -51,20 +54,34 @@ function FileRow({ file, onStage, onUnstage, loading }) {
         {STATUS_LABEL[statusChar] || statusChar}
       </span>
 
-      {/* File path */}
-      <span className="text-xs text-slate-300 truncate font-mono flex-1 min-w-0" title={file.path}>
+      {/* File path — click to scroll diff */}
+      <button
+        onClick={() => onDiffSelect?.(file.path)}
+        className="text-xs text-slate-300 truncate font-mono flex-1 min-w-0 text-left hover:text-violet-300 transition-colors"
+        title={file.path}
+      >
         {file.path}
-      </span>
+      </button>
+
+      {/* +/- stats */}
+      {(added > 0 || deleted > 0) && (
+        <span className="flex items-center gap-1 text-[10px] flex-shrink-0">
+          {added > 0 && <span style={{ color: '#7ee787' }}>+{added}</span>}
+          {deleted > 0 && <span style={{ color: '#f85149' }}>-{deleted}</span>}
+        </span>
+      )}
     </div>
   );
 }
 
-export default function GitStagingPanel({ projectId, active = true, onDiffSelect }) {
+export default function GitStagingPanel({ projectId, projectPath, active = true, onDiffSelect, fileDiffStats = [] }) {
   const [status, setStatus] = useState({ isRepo: true, files: [], branch: null });
   const [loading, setLoading] = useState(null); // tracks which file op is in progress
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [pullBranch, setPullBranch] = useState(''); // '' = default (origin tracking)
+  const [branches, setBranches] = useState([]);
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
@@ -76,6 +93,14 @@ export default function GitStagingPanel({ projectId, active = true, onDiffSelect
       setStatus(s);
     } catch {}
   }, [projectId]);
+
+  // Load branch list for "pull from" selector
+  useEffect(() => {
+    if (!projectPath || !active) return;
+    getBranches(projectPath).then((r) => {
+      setBranches((r.branches || []).map((b) => b.name));
+    }).catch(() => {});
+  }, [projectPath, active]);
 
   useEffect(() => {
     if (!active) return;
@@ -148,7 +173,7 @@ export default function GitStagingPanel({ projectId, active = true, onDiffSelect
     setPulling(true);
     setError('');
     setSuccessMsg('');
-    const result = await gitPull(projectId);
+    const result = await gitPull(projectId, pullBranch || undefined);
     if (result.success) {
       setSuccessMsg(result.output || 'Already up to date');
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -229,6 +254,8 @@ export default function GitStagingPanel({ projectId, active = true, onDiffSelect
                     onStage={handleStage}
                     onUnstage={handleUnstage}
                     loading={loading}
+                    diffStats={fileDiffStats.find((s) => s.path === f.path)}
+                    onDiffSelect={onDiffSelect}
                   />
                 ))}
               </>
@@ -247,6 +274,8 @@ export default function GitStagingPanel({ projectId, active = true, onDiffSelect
                     onStage={handleStage}
                     onUnstage={handleUnstage}
                     loading={loading}
+                    diffStats={fileDiffStats.find((s) => s.path === f.path)}
+                    onDiffSelect={onDiffSelect}
                   />
                 ))}
               </>
@@ -291,6 +320,23 @@ export default function GitStagingPanel({ projectId, active = true, onDiffSelect
             <>Commit to <span className="font-bold">{status.branch || 'branch'}</span></>
           )}
         </button>
+
+        {/* Pull from branch selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-600 flex-shrink-0">Pull from</span>
+          <select
+            value={pullBranch}
+            onChange={(e) => setPullBranch(e.target.value)}
+            className="flex-1 min-w-0 px-2 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg text-xs text-slate-300 outline-none focus:border-violet-500/60 transition-colors"
+          >
+            <option value="">origin (default)</option>
+            {branches
+              .filter((b) => b !== status.branch)
+              .map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+          </select>
+        </div>
 
         <div className="flex gap-2">
           <button

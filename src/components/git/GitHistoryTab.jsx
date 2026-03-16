@@ -24,6 +24,7 @@ export default function GitHistoryTab({ project, active }) {
   const [workingFiles, setWorkingFiles] = useState([]);
   const [workingLoading, setWorkingLoading] = useState(false);
   const debounceRef = useRef(null);
+  const scrollToFileRef = useRef(null);
 
   // ── Resizable left panel ───────────────────────────────────────────────────
   const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT);
@@ -156,7 +157,13 @@ export default function GitHistoryTab({ project, active }) {
             onSelect={handleSelectCommit}
           />
         ) : (
-          <GitStagingPanel projectId={project.id} active={active && tab === 'Changes'} />
+          <GitStagingPanel
+            projectId={project.id}
+            projectPath={project.path}
+            active={active && tab === 'Changes'}
+            fileDiffStats={workingFiles}
+            onDiffSelect={(path) => scrollToFileRef.current?.(path)}
+          />
         )}
       </div>
 
@@ -188,6 +195,7 @@ export default function GitHistoryTab({ project, active }) {
           diff={showChanges ? workingDiff : commitDiff}
           loading={showChanges ? workingLoading : diffLoading}
           isChanges={showChanges}
+          onReady={(fn) => { scrollToFileRef.current = fn; }}
         />
       </div>
 

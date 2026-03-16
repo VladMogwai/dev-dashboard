@@ -381,9 +381,10 @@ async function pushChanges(repoPath) {
   }
 }
 
-async function pullChanges(repoPath) {
+async function pullChanges(repoPath, fromBranch) {
   try {
-    const { stdout, stderr } = await execAsync('git pull', {
+    const args = fromBranch ? ['pull', 'origin', fromBranch] : ['pull'];
+    const { stdout, stderr } = await execAsync(`git ${args.join(' ')}`, {
       cwd: repoPath, env: GIT_ENV, timeout: 30000,
     });
     return { success: true, output: (stdout + stderr).trim() };
