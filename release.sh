@@ -1,6 +1,32 @@
 #!/bin/bash
 set -e
 
+print_banner() {
+  local code=$1
+  local version=$2
+  echo ""
+  if [ "$code" -eq 0 ]; then
+    printf "\033[1;32m"
+    printf "╔══════════════════════════════════════════════════════╗\n"
+    printf "║                                                      ║\n"
+    printf "║   ✅   RELEASE v%-6s COMPLETED SUCCESSFULLY   ✅   ║\n" "$version"
+    printf "║                                                      ║\n"
+    printf "╚══════════════════════════════════════════════════════╝\n"
+    printf "\033[0m"
+  else
+    printf "\033[1;31m"
+    printf "╔══════════════════════════════════════════════════════╗\n"
+    printf "║                                                      ║\n"
+    printf "║   ❌         RELEASE FAILED WITH ERROR          ❌   ║\n"
+    printf "║                                                      ║\n"
+    printf "╚══════════════════════════════════════════════════════╝\n"
+    printf "\033[0m"
+  fi
+  echo ""
+}
+
+trap 'print_banner $? "$VERSION"' EXIT
+
 VERSION=$1
 
 if [ -z "$VERSION" ]; then
