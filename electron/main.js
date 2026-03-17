@@ -213,7 +213,7 @@ app.on('before-quit', async (event) => {
 
       const result = await dialog.showMessageBox(mainWindow, {
         type: 'question',
-        title: 'Quit Dev Dashboard',
+        title: 'Quit Polvoo',
         message: `You have ${label} started from this app.`,
         detail: 'Do you want to stop them before quitting?',
         buttons: ['Stop Processes & Quit', 'Quit Without Stopping', 'Cancel'],

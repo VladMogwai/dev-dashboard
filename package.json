@@ -1,5 +1,5 @@
 {
-  "name": "dev-dashboard",
+  "name": "polvoo",
   "version": "1.0.5",
   "description": "Developer Project Dashboard — like Docker Desktop for local dev projects",
   "main": "electron/main.js",
@@ -14,13 +14,13 @@
     "postinstall": "electron-rebuild -f -w node-pty"
   },
   "build": {
-    "appId": "com.devdashboard.app",
-    "productName": "Dev Dashboard",
+    "appId": "com.polvoo.app",
+    "productName": "Polvoo",
     "asar": true,
     "publish": {
       "provider": "github",
       "owner": "VladMogwai",
-      "repo": "dev-dashboard"
+      "repo": "polvoo"
     },
     "asarUnpack": [
       "**/node_modules/node-pty/**"

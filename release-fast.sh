@@ -15,7 +15,7 @@ npm version $VERSION --no-git-tag-version --allow-same-version
 echo "📦 Building arm64 only..."
 npm run dist
 
-ARM64_FILE="dist/Dev Dashboard-$VERSION-arm64-mac.zip"
+ARM64_FILE="dist/Polvoo-$VERSION-arm64-mac.zip"
 ARM64_HASH=$(shasum -a 256 "$ARM64_FILE" | awk '{print $1}')
 
 echo "✅ arm64: $ARM64_HASH"
@@ -30,32 +30,32 @@ echo "📤 Uploading to GitHub Release..."
 gh release create "v$VERSION" \
   "$ARM64_FILE" \
   "dist/latest-mac.yml" \
-  --title "Dev Dashboard $VERSION" \
+  --title "Polvoo $VERSION" \
   --notes "Release v$VERSION (Apple Silicon)"
 
 echo "✅ GitHub Release created and files uploaded!"
 
-TAP_DIR="../homebrew-dev-dashboard"
+TAP_DIR="../homebrew-polvoo"
 
-cat > "$TAP_DIR/Casks/dev-dashboard.rb" << EOF
-cask "dev-dashboard" do
+cat > "$TAP_DIR/Casks/polvoo.rb" << EOF
+cask "polvoo" do
   version "$VERSION"
 
   sha256 "$ARM64_HASH"
-  url "https://github.com/VladMogwai/dev-dashboard/releases/download/v$VERSION/Dev.Dashboard-$VERSION-arm64-mac.zip"
+  url "https://github.com/VladMogwai/polvoo/releases/download/v$VERSION/Polvoo-$VERSION-arm64-mac.zip"
 
-  name "Dev Dashboard"
+  name "Polvoo"
   desc "Developer Project Dashboard — like Docker Desktop for local dev projects"
-  homepage "https://github.com/VladMogwai/dev-dashboard"
+  homepage "https://github.com/VladMogwai/polvoo"
 
-  app "Dev Dashboard.app"
+  app "Polvoo.app"
 
-  uninstall quit: "com.devdashboard.app",
-            delete: "/Applications/Dev Dashboard.app"
+  uninstall quit: "com.polvoo.app",
+            delete: "/Applications/Polvoo.app"
 
   postflight do
     system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/Dev Dashboard.app"],
+                   args: ["-cr", "#{appdir}/Polvoo.app"],
                    sudo: false
   end
 end
@@ -68,4 +68,4 @@ git push
 
 echo ""
 echo "✅ Fast release v$VERSION is live!"
-echo "👉 https://github.com/VladMogwai/dev-dashboard/releases/tag/v$VERSION"
+echo "👉 https://github.com/VladMogwai/polvoo/releases/tag/v$VERSION"

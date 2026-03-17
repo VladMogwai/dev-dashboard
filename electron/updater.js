@@ -61,7 +61,7 @@ function init(win, isDev) {
     try {
       new Notification({
         title: 'Update ready to install',
-        body: `Dev Dashboard ${info.version} is downloaded. Open the app to restart and install.`,
+        body: `Polvoo ${info.version} is downloaded. Open the app to restart and install.`,
       }).show();
     } catch {}
   });

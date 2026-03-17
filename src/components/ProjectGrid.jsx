@@ -40,7 +40,7 @@ export default function ProjectGrid({
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M3 12h18M3 17h18" />
             </svg>
           </div>
-          <span className="text-sm font-semibold text-slate-100">Dev Dashboard</span>
+          <span className="text-sm font-semibold text-slate-100">Polvoo</span>
           <span className="text-xs text-slate-500 ml-1">
             {projects.length} project{projects.length !== 1 ? 's' : ''}
           </span>

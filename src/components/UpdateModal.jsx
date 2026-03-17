@@ -36,7 +36,7 @@ export default function UpdateModal({ version, onInstall, onDismiss }) {
               </div>
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-slate-100 leading-snug">
-                  Dev Dashboard {version} is ready
+                  Polvoo {version} is ready
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   New version downloaded and ready to install

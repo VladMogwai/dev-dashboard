@@ -249,7 +249,7 @@ export default function SettingsPanel({ onClose }) {
               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/40">
                 <div>
                   <p className="text-sm text-slate-200 font-medium">Launch at Login</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Start Dev Dashboard when you log in</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Start Polvoo when you log in</p>
                 </div>
                 <button
                   type="button"
