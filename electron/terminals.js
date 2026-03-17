@@ -1,11 +1,11 @@
 'use strict';
 
-const { execSync, exec, execFile } = require('child_process');
+const { execSync, execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
 const settings = require('./settings');
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const FULL_ENV = {
   ...process.env,
@@ -54,7 +54,8 @@ function getInstalled() {
 }
 
 async function openInTerminal(terminalId, projectPath) {
-  const escaped = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // Escape path for AppleScript string literals: backslash then double-quote
+  const appleEscaped = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
   // Check custom terminals first
   const custom = (settings.get().customTerminals || []).find((t) => t.id === terminalId);
@@ -67,11 +68,12 @@ async function openInTerminal(terminalId, projectPath) {
     };
 
     if (custom.openCommand) {
-      // User-provided command template: {path} is replaced
-      const cmd = custom.openCommand.replace(/{path}/g, escaped);
-      await execAsync(cmd, { env: envWithExtra });
+      // User-provided command template: {path} is replaced (user configured this intentionally)
+      const cmd = custom.openCommand.replace(/{path}/g, appleEscaped);
+      await execFileAsync('/bin/sh', ['-c', cmd], { env: envWithExtra });
     } else if (custom.appPath) {
-      await execAsync(`open -a "${custom.appPath.replace(/"/g, '\\"')}" "${escaped}"`, { env: envWithExtra });
+      // Use execFileAsync('open') to avoid shell injection via appPath/projectPath
+      await execFileAsync('open', ['-a', custom.appPath, projectPath], { env: envWithExtra });
     } else {
       throw new Error(`Custom terminal "${custom.name}" has no appPath or openCommand`);
     }
@@ -82,53 +84,56 @@ async function openInTerminal(terminalId, projectPath) {
   const env = FULL_ENV;
   switch (terminalId) {
     case 'warp':
-      await execAsync(`open -a Warp "${escaped}"`, { env });
+      // Use execFile to avoid shell injection via projectPath
+      await execFileAsync('open', ['-a', 'Warp', projectPath], { env });
       break;
 
     case 'iterm2': {
+      // Use execFileAsync('osascript') to avoid shell layer; quoted form of handles shell quoting inside do script
       const script = `tell application "iTerm2"
   activate
   tell current window
     create tab with default profile
     tell current session
-      write text "cd \\"${escaped}\\""
+      write text "cd " & quoted form of "${appleEscaped}"
     end tell
   end tell
 end tell`;
-      await execAsync(`osascript << 'APPLESCRIPT'\n${script}\nAPPLESCRIPT`, { env }).catch(async () => {
-        await execAsync(`open -a iTerm "${escaped}"`, { env });
+      await execFileAsync('osascript', ['-e', script], { env }).catch(async () => {
+        await execFileAsync('open', ['-a', 'iTerm', projectPath], { env });
       });
       break;
     }
 
     case 'ghostty':
-      await execAsync(`open -a Ghostty "${escaped}"`, { env });
+      await execFileAsync('open', ['-a', 'Ghostty', projectPath], { env });
       break;
 
     case 'wezterm':
-      await execAsync(`wezterm start --cwd "${escaped}"`, { env }).catch(async () => {
-        await execAsync(`open -a WezTerm "${escaped}"`, { env });
+      await execFileAsync('wezterm', ['start', '--cwd', projectPath], { env }).catch(async () => {
+        await execFileAsync('open', ['-a', 'WezTerm', projectPath], { env });
       });
       break;
 
     case 'alacritty':
-      await execAsync(`open -a Alacritty "${escaped}"`, { env });
+      await execFileAsync('open', ['-a', 'Alacritty', projectPath], { env });
       break;
 
     case 'hyper':
-      await execAsync(`open -a Hyper "${escaped}"`, { env });
+      await execFileAsync('open', ['-a', 'Hyper', projectPath], { env });
       break;
 
     case 'kitty':
-      await execAsync(`kitty --directory "${escaped}"`, { env }).catch(async () => {
-        await execAsync(`open -a kitty "${escaped}"`, { env });
+      await execFileAsync('kitty', ['--directory', projectPath], { env }).catch(async () => {
+        await execFileAsync('open', ['-a', 'kitty', projectPath], { env });
       });
       break;
 
     case 'terminal':
     default: {
-      const script2 = `tell app "Terminal" to do script "cd \\"${escaped}\\""`;
-      await execAsync(`osascript -e '${script2.replace(/'/g, "'\\''")}'`, { env });
+      // Use execFileAsync to avoid shell layer; quoted form of handles shell quoting inside do script
+      const script2 = `tell app "Terminal" to do script "cd " & quoted form of "${appleEscaped}"`;
+      await execFileAsync('osascript', ['-e', script2], { env });
       break;
     }
   }

@@ -269,7 +269,8 @@ async function createBranch(repoPath, branchName, setUpstream) {
     await runFile(['checkout', '-b', branchName], repoPath);
     if (setUpstream) {
       // Push and set upstream: git push -u origin <branch>
-      const { stderr } = await execAsync(`git push -u origin "${branchName.replace(/"/g, '\\"')}"`, {
+      // Use execFileAsync to prevent shell injection via branchName
+      const { stderr } = await execFileAsync('git', ['push', '-u', 'origin', branchName], {
         cwd: repoPath, env: GIT_ENV, timeout: 30000,
       }).catch((err) => ({ stderr: err.stderr || err.message }));
       // stderr is normal for git push (progress output) — only fail on non-zero exit
@@ -370,7 +371,7 @@ async function commitChanges(repoPath, summary, description) {
 
 async function pushChanges(repoPath) {
   try {
-    const { stdout, stderr } = await execAsync('git push', {
+    const { stdout, stderr } = await execFileAsync('git', ['push'], {
       cwd: repoPath, env: GIT_ENV, timeout: 30000,
     });
     return { success: true, output: stdout + stderr };
@@ -383,8 +384,9 @@ async function pushChanges(repoPath) {
 
 async function pullChanges(repoPath, fromBranch) {
   try {
+    // Use execFileAsync to prevent shell injection via fromBranch
     const args = fromBranch ? ['pull', 'origin', fromBranch] : ['pull'];
-    const { stdout, stderr } = await execAsync(`git ${args.join(' ')}`, {
+    const { stdout, stderr } = await execFileAsync('git', args, {
       cwd: repoPath, env: GIT_ENV, timeout: 30000,
     });
     return { success: true, output: (stdout + stderr).trim() };

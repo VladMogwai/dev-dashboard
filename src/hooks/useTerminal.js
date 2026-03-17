@@ -261,9 +261,20 @@ export function useTerminal(containerRef, projectId, type, active, options = {})
     if (!initializedRef.current) {
       init();
     } else {
-      fitWhenReady();
+      // Delay gives the browser time to finish layout after display:none → block,
+      // which happens when switching tabs. requestAnimationFrame alone is not
+      // enough because the frame can fire before the new layout is computed.
+      const timer = setTimeout(() => {
+        if (fitAddonRef.current) {
+          try { fitAddonRef.current.fit(); } catch (_) {}
+        }
+        if (termRef.current) {
+          try { termRef.current.scrollToBottom(); } catch (_) {}
+        }
+      }, 50);
+      return () => clearTimeout(timer);
     }
-  }, [active, init, fitWhenReady]);
+  }, [active, init]);
 
   // ── Public API ────────────────────────────────────────────────────────────
 

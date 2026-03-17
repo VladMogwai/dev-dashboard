@@ -184,7 +184,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Shell utilities
   shell: {
-    openExternal: (url) => shell.openExternal(url),
+    openExternal: (url) => {
+      // Only allow safe protocols — block file://, javascript:, data:, etc.
+      if (typeof url !== 'string') return;
+      if (!/^(https?:|mailto:)/i.test(url)) return;
+      return shell.openExternal(url);
+    },
   },
 
   // File path resolution (Electron 32+ replacement for File.path)

@@ -87,7 +87,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -431,6 +431,10 @@ ipcMain.handle('ports:update', (_, projectId, newPort) => {
   const portsUtil = require('./ports');
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { success: false, error: 'Not found' };
+  const port = Number(newPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { success: false, error: 'Invalid port number' };
+  }
   const newCmd = portsUtil.setPort(project.startCommand, newPort);
   project.startCommand = newCmd;
   saveProjects();
@@ -631,6 +635,9 @@ ipcMain.handle('ports:list', async () => {
 
 // Kill process on a specific port (no PID needed)
 ipcMain.handle('ports:kill-port', async (_, port) => {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { success: false, error: 'Invalid port number' };
+  }
   const { execFile } = require('child_process');
   const { promisify } = require('util');
   const execFileAsync = promisify(execFile);
@@ -672,6 +679,9 @@ ipcMain.handle('ports:kill-port', async (_, port) => {
 
 // Kill a process by PID (SIGTERM, then SIGKILL if needed)
 ipcMain.handle('ports:kill-pid', async (_, pid) => {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { success: false, error: 'Invalid PID' };
+  }
   try {
     // If this PID belongs to a managed project, stop via processManager
     // so manualStop is set before the kill signal.
@@ -719,7 +729,13 @@ ipcMain.handle('process:get-all-running', () => {
 });
 
 ipcMain.handle('process:get-stats', async (_, pids) => {
-  return processManager.getProcessStats(pids);
+  // Only return stats for PIDs this app actually owns to prevent PID enumeration
+  const ownedPids = new Set(
+    processManager.getAllRunning().map((e) => e.pid).filter(Boolean)
+  );
+  const safePids = (pids || []).filter((p) => ownedPids.has(p));
+  if (safePids.length === 0) return {};
+  return processManager.getProcessStats(safePids);
 });
 
 // ─── IPC: Git ─────────────────────────────────────────────────────────────────
@@ -741,6 +757,9 @@ ipcMain.handle('git:get-branches', async (_, projectPath) => {
 });
 
 ipcMain.handle('git:checkout', async (_, projectPath, branchName) => {
+  if (!projects.find((p) => p.path === projectPath)) {
+    return { success: false, error: 'Project not found' };
+  }
   try {
     return await gitManager.checkoutBranch(projectPath, branchName);
   } catch (err) {
@@ -749,6 +768,9 @@ ipcMain.handle('git:checkout', async (_, projectPath, branchName) => {
 });
 
 ipcMain.handle('git:create-branch', async (_, projectPath, branchName, setUpstream) => {
+  if (!projects.find((p) => p.path === projectPath)) {
+    return { success: false, error: 'Project not found' };
+  }
   try {
     return await gitManager.createBranch(projectPath, branchName, setUpstream);
   } catch (err) {
@@ -831,20 +853,24 @@ ipcMain.handle('git:pull', async (_, projectId, fromBranch) => {
 // ─── IPC: Command history ─────────────────────────────────────────────────────
 
 ipcMain.handle('history:get', (_, projectId) => {
+  if (!projects.find((p) => p.id === projectId)) return [];
   return historyManager.load(app.getPath('userData'), projectId);
 });
 
 ipcMain.handle('history:add', (_, projectId, command) => {
+  if (!projects.find((p) => p.id === projectId)) return false;
   historyManager.add(app.getPath('userData'), projectId, command);
   return true;
 });
 
 ipcMain.handle('history:delete', (_, projectId, command) => {
+  if (!projects.find((p) => p.id === projectId)) return false;
   historyManager.deleteCmd(app.getPath('userData'), projectId, command);
   return true;
 });
 
 ipcMain.handle('history:clear', (_, projectId) => {
+  if (!projects.find((p) => p.id === projectId)) return false;
   historyManager.clear(app.getPath('userData'), projectId);
   return true;
 });
@@ -919,7 +945,10 @@ ipcMain.handle('env:scan', (_, projectId) => {
 ipcMain.handle('env:save-file', (_, projectId, absolutePath, vars) => {
   const project = projects.find(p => p.id === projectId);
   if (!project) return { success: false, error: 'Project not found' };
-  if (!absolutePath.startsWith(project.path)) {
+  // Use path.resolve for canonical comparison to prevent path traversal (e.g. ../../etc/passwd)
+  const resolvedTarget = path.resolve(absolutePath);
+  const resolvedProject = path.resolve(project.path);
+  if (!resolvedTarget.startsWith(resolvedProject + path.sep) && resolvedTarget !== resolvedProject) {
     return { success: false, error: 'Path outside project directory' };
   }
   try {
@@ -935,6 +964,12 @@ ipcMain.handle('env:create-file', (_, projectId, relativePath) => {
   if (!project) return { success: false, error: 'Project not found' };
   try {
     const abs = path.join(project.path, relativePath);
+    // Prevent path traversal — file must stay inside the project directory
+    const resolvedAbs = path.resolve(abs);
+    const resolvedProject = path.resolve(project.path);
+    if (!resolvedAbs.startsWith(resolvedProject + path.sep)) {
+      return { success: false, error: 'Path outside project directory' };
+    }
     envLoader.createEnvFile(abs);
     return { success: true, absolutePath: abs };
   } catch (err) {
@@ -1126,8 +1161,12 @@ ipcMain.handle('settings:request-permission', async (_, name) => {
 });
 
 ipcMain.handle('settings:open-system-prefs', async (_, url) => {
+  // Only allow x-apple.systempreferences: URLs — reject anything else
+  const safeUrl = (typeof url === 'string' && url.startsWith('x-apple.systempreferences:'))
+    ? url
+    : 'x-apple.systempreferences:';
   try {
-    await shell.openExternal(url || 'x-apple.systempreferences:');
+    await shell.openExternal(safeUrl);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };

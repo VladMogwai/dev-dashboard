@@ -164,11 +164,15 @@ function loadEnv(projectPath, envFilePath) {
   const result = {};
   if (envFilePath) {
     const abs = path.isAbsolute(envFilePath) ? envFilePath : path.join(projectPath, envFilePath);
-    if (fs.existsSync(abs)) {
+    // Prevent path traversal: resolve canonical paths and verify the file stays within projectPath
+    const resolvedAbs = path.resolve(abs);
+    const resolvedProject = path.resolve(projectPath);
+    const isInProject = resolvedAbs.startsWith(resolvedProject + path.sep) || resolvedAbs === resolvedProject;
+    if (isInProject && fs.existsSync(resolvedAbs)) {
       try {
-        const parsed = dotenv.parse(fs.readFileSync(abs));
+        const parsed = dotenv.parse(fs.readFileSync(resolvedAbs));
         for (const [k, v] of Object.entries(parsed)) {
-          result[k] = { value: v, source: path.basename(abs), isSecret: SECRET_RE.test(k) };
+          result[k] = { value: v, source: path.basename(resolvedAbs), isSecret: SECRET_RE.test(k) };
         }
       } catch {}
     }
