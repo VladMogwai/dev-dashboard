@@ -35,7 +35,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Editors
   getInstalledEditors: () => ipcRenderer.invoke('editors:get-installed'),
-  getRunningEditors: (projectPath) => ipcRenderer.invoke('editors:get-running', projectPath),
   openInEditor: (editor, projectPath) => ipcRenderer.invoke('editors:open', editor, projectPath),
 
   // PTY

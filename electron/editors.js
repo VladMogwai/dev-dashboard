@@ -36,34 +36,37 @@ function checkApp(appPath) {
   return fs.existsSync(appPath);
 }
 
-const EDITOR_APPS = {
-  vscode: [
+const EDITORS = [
+  { id: 'vscode', name: 'VS Code', paths: [
     '/Applications/Visual Studio Code.app',
     `${os.homedir()}/Applications/Visual Studio Code.app`,
-  ],
-  cursor: [
+  ]},
+  { id: 'cursor', name: 'Cursor', paths: [
     '/Applications/Cursor.app',
     `${os.homedir()}/Applications/Cursor.app`,
-  ],
-  zed: [
+  ]},
+  { id: 'windsurf', name: 'Windsurf', paths: [
+    '/Applications/Windsurf.app',
+    `${os.homedir()}/Applications/Windsurf.app`,
+  ]},
+  { id: 'zed', name: 'Zed', paths: [
     '/Applications/Zed.app',
     `${os.homedir()}/Applications/Zed.app`,
-  ],
-  webstorm: [
+  ]},
+  { id: 'webstorm', name: 'WebStorm', paths: [
     '/Applications/WebStorm.app',
     `${os.homedir()}/Applications/WebStorm.app`,
-  ],
-};
+  ]},
+  { id: 'sublime', name: 'Sublime Text', paths: [
+    '/Applications/Sublime Text.app',
+    `${os.homedir()}/Applications/Sublime Text.app`,
+  ]},
+];
 
-async function getInstalled() {
-  const editors = [];
-
-  if (checkCli('code') || EDITOR_APPS.vscode.some(checkApp)) editors.push('vscode');
-  if (checkCli('cursor') || EDITOR_APPS.cursor.some(checkApp)) editors.push('cursor');
-  if (checkCli('zed') || EDITOR_APPS.zed.some(checkApp)) editors.push('zed');
-  if (checkApp('/Applications/WebStorm.app') || checkApp(`${os.homedir()}/Applications/WebStorm.app`)) editors.push('webstorm');
-
-  return editors;
+function getInstalled() {
+  return EDITORS
+    .filter((e) => e.paths.some((p) => fs.existsSync(p)))
+    .map((e) => ({ id: e.id, name: e.name }));
 }
 
 const EDITOR_APP_NAMES = {
@@ -71,6 +74,7 @@ const EDITOR_APP_NAMES = {
   cursor: 'Cursor',
   zed: 'Zed',
   webstorm: 'WebStorm',
+  windsurf: 'Windsurf',
 };
 
 // Bring editor app to front via AppleScript
@@ -82,61 +86,6 @@ async function activate(editor) {
     'osascript', ['-e', `tell application "${appName}" to activate`],
     { env: FULL_ENV, timeout: 3000 }
   ).catch(() => {});
-}
-
-// Returns list of editor IDs that have the given projectPath currently open.
-//
-// Detection strategy by editor:
-//  • VS Code / Cursor: When a folder is open, the editor spawns "extension-host" helper
-//    processes whose argv[0] includes the folder basename:
-//      "Cursor Helper (Plugin): extension-host (user) <folderName> [...]"
-//      "Code Helper (Plugin): extension-host (user) <folderName> [...]"
-//    We match the folder basename in those lines. This is live (process must be running
-//    with that project open) and works without reading any files.
-//  • Zed / WebStorm: pass the full path as a CLI argument, visible in ps aux.
-async function getRunning(projectPath) {
-  const installed = await getInstalled();
-  if (!installed.length) return [];
-  if (!projectPath) return [];
-
-  let psOutput = '';
-  try {
-    const { stdout } = await execAsync('ps aux', { env: FULL_ENV, timeout: 3000 });
-    psOutput = stdout;
-  } catch { return []; }
-
-  const psLines = psOutput.split('\n');
-  const folderName = path.basename(projectPath);
-
-  return installed.filter((id) => {
-    if (id === 'vscode') {
-      // Match: "Code Helper (Plugin): extension-host ... <folderName>"
-      return psLines.some((line) =>
-        line.includes('Code Helper') &&
-        line.includes('extension-host') &&
-        line.includes(folderName)
-      );
-    }
-    if (id === 'cursor') {
-      // Match: "Cursor Helper (Plugin): extension-host ... <folderName>"
-      return psLines.some((line) =>
-        line.includes('Cursor Helper') &&
-        line.includes('extension-host') &&
-        line.includes(folderName)
-      );
-    }
-    if (id === 'zed') {
-      return psLines.some((line) =>
-        line.includes('/Zed.app') && line.includes(projectPath)
-      );
-    }
-    if (id === 'webstorm') {
-      return psLines.some((line) =>
-        line.includes('/WebStorm.app') && line.includes(projectPath)
-      );
-    }
-    return false;
-  });
 }
 
 async function open(editor, projectPath) {
@@ -167,6 +116,16 @@ async function open(editor, projectPath) {
     case 'webstorm':
       await execFileAsync('open', ['-a', 'WebStorm', projectPath], { env: FULL_ENV });
       break;
+    case 'windsurf':
+      if (checkCli('windsurf')) {
+        await execFileAsync('windsurf', [projectPath], { env: FULL_ENV });
+      } else {
+        await execFileAsync('open', ['-a', 'Windsurf', projectPath], { env: FULL_ENV });
+      }
+      break;
+    case 'sublime':
+      await execFileAsync('open', ['-a', 'Sublime Text', projectPath], { env: FULL_ENV });
+      break;
     default:
       throw new Error(`Unknown editor: ${editor}`);
   }
@@ -174,6 +133,8 @@ async function open(editor, projectPath) {
   // Always bring the editor window to the front
   await activate(editor);
 }
+
+// ─── Claude / terminal helpers ────────────────────────────────────────────────
 
 // Scan a directory for a binary — returns the full path if found, null otherwise
 function findInDir(dir, bin) {
@@ -300,4 +261,4 @@ end tell`;
   await execFileAsync('osascript', ['-e', script], { env: FULL_ENV });
 }
 
-module.exports = { getInstalled, getRunning, open, checkClaude, openClaudeExternal };
+module.exports = { getInstalled, open, checkClaude, openClaudeExternal };

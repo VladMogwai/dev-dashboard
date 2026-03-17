@@ -87,7 +87,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
   });
 
@@ -145,6 +145,7 @@ function startDockerPolling() {
   pollDocker();
   dockerPollTimer = setInterval(pollDocker, 5000);
 }
+
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -1008,11 +1009,7 @@ ipcMain.handle('pins:reorder', (_, projectId, commands) => {
 // ─── IPC: Editors ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('editors:get-installed', async () => {
-  return await editorManager.getInstalled();
-});
-
-ipcMain.handle('editors:get-running', async (_, projectPath) => {
-  return await editorManager.getRunning(projectPath);
+  return editorManager.getInstalled();
 });
 
 ipcMain.handle('editors:open', async (_, editor, projectPath) => {

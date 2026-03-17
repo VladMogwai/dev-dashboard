@@ -10,24 +10,10 @@ import EnvViewer from './terminal/EnvViewer';
 import { useProcess } from '../hooks/useProcess';
 import {
   getInstalledEditors,
-  getRunningEditors,
   openInEditor,
   getGitInfo,
 } from '../ipc';
 
-const EDITOR_LABELS = {
-  vscode: 'VS Code',
-  cursor: 'Cursor',
-  zed: 'Zed',
-  webstorm: 'WebStorm',
-};
-
-const EDITOR_COMMANDS = {
-  vscode: 'code',
-  cursor: 'cursor',
-  zed: 'zed',
-  webstorm: 'open -a WebStorm',
-};
 
 function Tooltip({ label, sub, children }) {
   const [visible, setVisible] = React.useState(false);
@@ -66,7 +52,7 @@ const STATUS_LABELS = { running: 'Running', stopped: 'Stopped', error: 'Error' }
 export default function DetailPanel({ project, gitInfo, onClose, onRemove, onUpdateProject, errorCount = 0, onLogsViewed, onLogsHidden, isActive = true }) {
   const [activeTab, setActiveTab] = useState('Logs');
   const [installedEditors, setInstalledEditors] = useState([]);
-  const [runningEditors, setRunningEditors] = useState([]);
+  const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
   const [localGitInfo, setLocalGitInfo] = useState(gitInfo || {});
 
   const { logs, clearLogs, run, killCmd, runningCmd } = useProcess(project.id);
@@ -82,14 +68,13 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove, onUpd
     getInstalledEditors().then(setInstalledEditors);
   }, []);
 
-  // Poll which editors are currently running every 4s
+  // Close dropdown on outside click
   useEffect(() => {
-    let cancelled = false;
-    const poll = () => getRunningEditors(project.path).then((r) => { if (!cancelled) setRunningEditors(r); }).catch(() => {});
-    poll();
-    const t = setInterval(poll, 4000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [project.path]);
+    if (!editorDropdownOpen) return;
+    const handler = () => setEditorDropdownOpen(false);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [editorDropdownOpen]);
 
   // Track whether errors are being viewed — fires when this panel becomes active/inactive
   // or when the user switches tabs within it
@@ -180,29 +165,47 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove, onUpd
 
       {/* ── Controls ─────────────────────────────────────────── */}
       <div className="px-4 py-2.5 border-b border-slate-700/60 flex flex-wrap items-center gap-2">
-        {/* Editor buttons */}
-        {installedEditors.map((editor) => {
-          const isOpen = runningEditors.includes(editor);
-          return (
-            <Tooltip
-              key={editor}
-              label={isOpen ? `${EDITOR_LABELS[editor]} is running` : `Open in ${EDITOR_LABELS[editor]}`}
-              sub={isOpen ? 'Click to bring to front' : project.path}
+        {/* Editor open button / dropdown */}
+        {installedEditors.length === 1 && (
+          <button
+            onClick={() => openInEditor(installedEditors[0].id, project.path)}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border-slate-700"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            {installedEditors[0].name}
+          </button>
+        )}
+        {installedEditors.length > 1 && (
+          <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setEditorDropdownOpen((o) => !o)}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border-slate-700"
             >
-              <button
-                onClick={() => openInEditor(editor, project.path)}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-colors border ${
-                  isOpen
-                    ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-600/30'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-500 border-slate-700 hover:text-slate-300'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                {EDITOR_LABELS[editor]}
-              </button>
-            </Tooltip>
-          );
-        })}
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+              Open in...
+              <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {editorDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 z-50 bg-[#161b22] border border-slate-700/60 rounded-lg shadow-xl overflow-hidden" style={{ minWidth: 140 }}>
+                {installedEditors.map((editor) => (
+                  <button
+                    key={editor.id}
+                    onClick={() => { openInEditor(editor.id, project.path); setEditorDropdownOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/60 hover:text-slate-100 transition-colors"
+                  >
+                    {editor.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* External terminal launcher */}
         <TerminalMenu projectPath={project.path} />

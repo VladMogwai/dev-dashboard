@@ -28,7 +28,6 @@ export const checkoutBranch = (path, branch) => api.checkoutBranch(path, branch)
 export const createBranch = (path, branchName, setUpstream) => api.createBranch(path, branchName, setUpstream);
 
 export const getInstalledEditors = () => api.getInstalledEditors();
-export const getRunningEditors = (projectPath) => api.getRunningEditors(projectPath);
 export const openInEditor = (editor, path) => api.openInEditor(editor, path);
 
 export const createPty = (projectId, type, cols, rows) => api.createPty(projectId, type, cols, rows);
