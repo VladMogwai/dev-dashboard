@@ -302,14 +302,12 @@ export default function DetailPanel({ project, gitInfo, onClose, onRemove, onUpd
 
         {/* Env tab */}
         <div className={`h-full ${activeTab === 'Env' ? 'flex flex-col' : 'hidden'}`}>
-          {activeTab === 'Env' && (
-            <EnvViewer projectId={project.id} onClose={() => handleTabChange('Logs')} />
-          )}
+          <EnvViewer projectId={project.id} onClose={() => handleTabChange('Logs')} />
         </div>
 
         {/* Docker tab */}
         <div className={`h-full ${activeTab === 'Docker' ? 'flex flex-col' : 'hidden'}`}>
-          {activeTab === 'Docker' && <DockerPanel project={project} />}
+          <DockerPanel project={project} />
         </div>
       </div>
     </div>
