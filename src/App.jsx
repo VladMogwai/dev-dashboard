@@ -14,6 +14,7 @@ import {
 const MIN_PANEL_WIDTH = 360;
 const MAX_PANEL_WIDTH = 860;
 const DEFAULT_PANEL_WIDTH = 460;
+const FIXED_SIDEBAR_WIDTH = 354;
 
 export default function App() {
   const { projects, gitInfo, loading, addProject, removeProject, updateProject, updateProjectStatus, reorderProjects } = useProjects();
@@ -25,6 +26,7 @@ export default function App() {
   const [runningCount, setRunningCount] = useState(0);
   const [xcodeBannerVisible, setXcodeBannerVisible] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [sidebarFixed, setSidebarFixed] = useState(() => localStorage.getItem('sidebarFixed') === 'true');
   const [errorCounts, setErrorCounts] = useState({});
   const viewingLogsForRef = useRef(null);
   const [updateStatus, setUpdateStatus] = useState(null); // { state, version?, percent? }
@@ -134,6 +136,14 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  function handleToggleSidebarFixed() {
+    setSidebarFixed((prev) => {
+      const next = !prev;
+      localStorage.setItem('sidebarFixed', next);
+      return next;
+    });
+  }
 
   const onDragMouseDown = useCallback((e) => {
     e.preventDefault();
@@ -332,9 +342,10 @@ export default function App() {
         <div
           className="flex flex-col overflow-hidden flex-shrink-0"
           style={{
-            width: liveSelected ? `calc(100% - ${panelWidth}px - 5px)` : '100%',
+            width: sidebarFixed ? FIXED_SIDEBAR_WIDTH : liveSelected ? `calc(100% - ${panelWidth}px - 5px)` : '100%',
+            flexShrink: 0,
             transition: dragging.current ? 'none' : 'width 180ms ease',
-            minWidth: liveSelected ? 240 : 0,
+            minWidth: liveSelected ? 340 : 0,
           }}
         >
           <ProjectGrid
@@ -352,11 +363,13 @@ export default function App() {
             onRebuildInstall={rebuildInstall}
             runningCount={runningCount}
             updateState={updateStatus?.state}
+            sidebarFixed={sidebarFixed}
+            onToggleSidebarFixed={handleToggleSidebarFixed}
           />
         </div>
 
         {/* Drag handle */}
-        {liveSelected && (
+        {liveSelected && !sidebarFixed && (
           <div
             onMouseDown={onDragMouseDown}
             style={{
@@ -414,12 +427,12 @@ export default function App() {
 
         {/* Right pane — detail panels (all initialized panels kept alive, show/hide via CSS) */}
         <div
-          className="flex-shrink-0 overflow-hidden border-l border-slate-700/60"
+          className="overflow-hidden border-l border-slate-700/60"
           style={{
-            width: liveSelected ? panelWidth : 0,
-            transition: dragging.current ? 'none' : 'width 180ms ease',
+            flex: liveSelected ? '1 1 0' : '0 0 354px',
             minWidth: 0,
             position: 'relative',
+            transition: dragging.current ? 'none' : 'flex-basis 180ms ease',
           }}
         >
           {[...initializedIds].map((id) => {

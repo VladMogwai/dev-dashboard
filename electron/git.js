@@ -289,13 +289,37 @@ async function getWorkingTreeDiff(repoPath) {
 
 // Returns structured list of changed files with staging status
 // Format: [{ path, x (staged status), y (unstaged status), isStaged, isUnstaged, isUntracked }]
+async function getDefaultBranch(repoPath) {
+  // 1. Try remote HEAD reference (most reliable)
+  try {
+    const ref = await runFile(["symbolic-ref", "refs/remotes/origin/HEAD"], repoPath);
+    return ref.replace("refs/remotes/origin/", "").trim();
+  } catch {}
+  // 2. Check if 'main' exists locally
+  try {
+    await runFile(["rev-parse", "--verify", "main"], repoPath);
+    return "main";
+  } catch {}
+  // 3. Fall back to master
+  return "master";
+}
+
 async function createBranch(repoPath, branchName, setUpstream) {
   try {
-    // Create and switch to new branch from current HEAD
+    const base = await getDefaultBranch(repoPath);
+
+    // Checkout base branch and pull latest before branching
+    await runFile(["checkout", base], repoPath);
+    try {
+      await runFile(["pull"], repoPath);
+    } catch {
+      // pull failure is non-fatal (e.g. no remote) — continue
+    }
+
+    // Create and switch to new branch from base
     await runFile(["checkout", "-b", branchName], repoPath);
+
     if (setUpstream) {
-      // Push and set upstream: git push -u origin <branch>
-      // Use execFileAsync to prevent shell injection via branchName
       const { stderr } = await execFileAsync(
         "git",
         ["push", "-u", "origin", branchName],
@@ -305,11 +329,9 @@ async function createBranch(repoPath, branchName, setUpstream) {
           timeout: 30000,
         },
       ).catch((err) => ({ stderr: err.stderr || err.message }));
-      // stderr is normal for git push (progress output) — only fail on non-zero exit
-      // execAsync rejects on non-zero, so if we got here the push succeeded
       void stderr;
     }
-    return { success: true };
+    return { success: true, baseBranch: base };
   } catch (err) {
     return { success: false, error: (err.stderr || err.message || String(err)).trim() };
   }
@@ -521,11 +543,29 @@ async function pullChanges(repoPath, fromBranch) {
   }
 }
 
+async function discardFile(repoPath, filePath) {
+  console.log("[git] discardFile:", repoPath, filePath);
+  try {
+    try {
+      await runFile(["restore", "--", filePath], repoPath);
+    } catch {
+      await runFile(["checkout", "--", filePath], repoPath);
+    }
+    console.log("[git] discardFile: success");
+    return { success: true };
+  } catch (err) {
+    const msg = (err.stderr || err.message || String(err)).trim();
+    console.error("[git] discardFile failed:", msg);
+    return { success: false, error: msg };
+  }
+}
+
 module.exports = {
   getInfo,
   getBranches,
   checkoutBranch,
   createBranch,
+  getDefaultBranch,
   getCommitLog,
   getCommitFiles,
   getCommitDiff,
@@ -538,4 +578,5 @@ module.exports = {
   commitChanges,
   pushChanges,
   pullChanges,
+  discardFile,
 };

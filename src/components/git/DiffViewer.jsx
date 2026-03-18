@@ -8,7 +8,7 @@ const MIN_FILE_HEIGHT = 40;
 const MAX_FILE_HEIGHT = 400;
 const DEFAULT_FILE_HEIGHT = 160;
 
-export default function DiffViewer({ commit, files, diff, loading, isChanges, onReady }) {
+export default function DiffViewer({ commit, files, diff, loading, isChanges, onReady, onDiscardFile }) {
   const diffContentRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [fileListHeight, setFileListHeight] = useState(DEFAULT_FILE_HEIGHT);
@@ -111,7 +111,7 @@ export default function DiffViewer({ commit, files, diff, loading, isChanges, on
       {hasFiles && !isChanges && (
         <>
           <div style={{ height: fileListHeight, minHeight: MIN_FILE_HEIGHT, flexShrink: 0, overflow: 'hidden' }}>
-            <FileList files={files} onClickFile={(path) => diffContentRef.current?.scrollToFile(path)} />
+            <FileList files={files} onClickFile={(path) => diffContentRef.current?.scrollToFile(path)} onDiscardFile={onDiscardFile} />
           </div>
 
           {/* Horizontal drag handle */}

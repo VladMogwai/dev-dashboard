@@ -100,7 +100,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL("http://localhost:5173");
-    //mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
@@ -816,6 +816,14 @@ ipcMain.handle("git:get-info", async (_, projectPath) => {
   }
 });
 
+ipcMain.handle("git:getDefaultBranch", async (_, projectPath) => {
+  try {
+    return await gitManager.getDefaultBranch(projectPath);
+  } catch {
+    return "main";
+  }
+});
+
 ipcMain.handle("git:get-branches", async (_, projectPath) => {
   try {
     return await gitManager.getBranches(projectPath);
@@ -942,6 +950,12 @@ ipcMain.handle("git:unstageAll", async (_, projectId) => {
   const result = await gitManager.unstageAll(project.path);
   if (!result.success) console.error("[main] git:unstageAll result:", result);
   return result;
+});
+
+ipcMain.handle("git:discardFile", async (_, projectId, filePath) => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return { success: false, error: "Project not found" };
+  return gitManager.discardFile(project.path, filePath);
 });
 
 ipcMain.handle("git:commit", async (_, projectId, summary, description) => {

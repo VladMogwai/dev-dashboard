@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CommitList from './CommitList';
 import DiffViewer from './DiffViewer';
 import GitStagingPanel from './GitStagingPanel';
-import { gitGetFiles, gitGetDiff, gitGetChanges, createBranch, getGitInfo } from '../../ipc';
+import { gitGetFiles, gitGetDiff, gitGetChanges, gitDiscardFile, createBranch, getGitInfo } from '../../ipc';
 
 const MIN_LEFT = 160;
 const MAX_LEFT = 400;
@@ -80,37 +80,42 @@ export default function GitHistoryTab({ project, active }) {
 
   // ── Working tree diff ──────────────────────────────────────────────────────
 
+  const refreshWorkingDiff = useCallback(async () => {
+    try {
+      const result = await gitGetChanges(project.id);
+      if (!result.isRepo) return;
+      const combined = [result.staged, result.unstaged].filter(Boolean).join('\n');
+      setWorkingDiff(combined);
+      const files = [];
+      const seen = new Set();
+      let lastFile = null;
+      for (const line of combined.split('\n')) {
+        if (line.startsWith('diff --git ')) {
+          const m = line.match(/^diff --git a\/(.*) b\/(.*)$/);
+          const path = m ? m[2] : line;
+          if (!seen.has(path)) {
+            seen.add(path);
+            lastFile = { type: 'M', path, added: 0, deleted: 0 };
+            files.push(lastFile);
+          } else {
+            lastFile = null; // already counted — skip duplicate diff block
+          }
+        } else if (lastFile) {
+          if (line.startsWith('+') && !line.startsWith('+++')) lastFile.added++;
+          else if (line.startsWith('-') && !line.startsWith('---')) lastFile.deleted++;
+        }
+      }
+      setWorkingFiles(files);
+    } catch {}
+  }, [project.id]);
+
   useEffect(() => {
-    // Only load when the Git tab is visible AND sub-tab is Changes
     if (!active || tab !== 'Changes') return;
     setWorkingLoading(true);
-    gitGetChanges(project.id)
-      .then((result) => {
-        if (!result.isRepo) { setWorkingLoading(false); return; }
-        const combined = [result.staged, result.unstaged].filter(Boolean).join('\n');
-        setWorkingDiff(combined);
-        const files = [];
-        const seen = new Set();
-        let lastFile = null;
-        for (const line of combined.split('\n')) {
-          if (line.startsWith('diff --git ')) {
-            const m = line.match(/^diff --git a\/(.*) b\/(.*)$/);
-            const path = m ? m[2] : line;
-            if (!seen.has(path)) {
-              seen.add(path);
-              lastFile = { type: 'M', path, added: 0, deleted: 0 };
-              files.push(lastFile);
-            }
-          } else if (lastFile) {
-            if (line.startsWith('+') && !line.startsWith('+++')) lastFile.added++;
-            else if (line.startsWith('-') && !line.startsWith('---')) lastFile.deleted++;
-          }
-        }
-        setWorkingFiles(files);
-      })
-      .catch(() => {})
-      .finally(() => setWorkingLoading(false));
-  }, [tab, project.id, active]);
+    refreshWorkingDiff().finally(() => setWorkingLoading(false));
+    const t = setInterval(refreshWorkingDiff, 4000);
+    return () => clearInterval(t);
+  }, [tab, project.id, active, refreshWorkingDiff]);
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
@@ -196,6 +201,10 @@ export default function GitHistoryTab({ project, active }) {
           loading={showChanges ? workingLoading : diffLoading}
           isChanges={showChanges}
           onReady={(fn) => { scrollToFileRef.current = fn; }}
+          onDiscardFile={showChanges ? async (filePath) => {
+            await gitDiscardFile(project.id, filePath);
+            await refreshWorkingDiff();
+          } : undefined}
         />
       </div>
 

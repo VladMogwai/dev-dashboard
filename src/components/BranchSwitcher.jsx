@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getBranches, checkoutBranch, createBranch } from '../ipc';
+import { getBranches, checkoutBranch, createBranch, getDefaultBranch } from '../ipc';
 
 // Git branch icon
 function GitBranchIcon({ className }) {
@@ -48,6 +48,7 @@ export default function BranchSwitcher({ projectPath, currentBranch, onBranchCha
   const [setUpstream, setSetUpstream] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [defaultBranch, setDefaultBranch] = useState(null);
 
   const wrapperRef = useRef(null);
   const filterInputRef = useRef(null);
@@ -180,7 +181,7 @@ export default function BranchSwitcher({ projectPath, currentBranch, onBranchCha
             <div className="p-3 space-y-2.5">
               <div className="flex items-center gap-2 mb-1">
                 <button
-                  onClick={() => { setShowNewBranch(false); setCreateError(''); }}
+                  onClick={() => { setShowNewBranch(false); setCreateError(''); setDefaultBranch(null); }}
                   className="text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -201,7 +202,7 @@ export default function BranchSwitcher({ projectPath, currentBranch, onBranchCha
               />
 
               <p className="text-[10px] text-slate-600">
-                Branch from: <span className="text-slate-400 font-mono">{currentBranch}</span>
+                Branch from: <span className="text-slate-400 font-mono">{defaultBranch ?? '…'}</span>
               </p>
 
               {/* Set upstream toggle */}
@@ -248,7 +249,12 @@ export default function BranchSwitcher({ projectPath, currentBranch, onBranchCha
                   className="flex-1 min-w-0 bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30 transition-colors"
                 />
                 <button
-                  onClick={() => { setShowNewBranch(true); setNewBranchName(filter); setFilter(''); }}
+                  onClick={() => {
+                    setShowNewBranch(true);
+                    setNewBranchName(filter);
+                    setFilter('');
+                    getDefaultBranch(projectPath).then(setDefaultBranch).catch(() => setDefaultBranch('main'));
+                  }}
                   title="Create new branch"
                   className="flex-shrink-0 px-2.5 py-1.5 bg-violet-600/20 hover:bg-violet-600/40 border border-violet-600/40 text-violet-400 text-xs rounded-lg transition-colors flex items-center gap-1"
                 >

@@ -124,6 +124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitUnstageFile: (projectId, filePath) => ipcRenderer.invoke('git:unstageFile', projectId, filePath),
   gitStageAll: (projectId) => ipcRenderer.invoke('git:stageAll', projectId),
   gitUnstageAll: (projectId) => ipcRenderer.invoke('git:unstageAll', projectId),
+  gitDiscardFile: (projectId, filePath) => ipcRenderer.invoke('git:discardFile', projectId, filePath),
+  gitGetDefaultBranch: (projectPath) => ipcRenderer.invoke('git:getDefaultBranch', projectPath),
   gitCommit: (projectId, summary, description) => ipcRenderer.invoke('git:commit', projectId, summary, description),
   gitPush: (projectId) => ipcRenderer.invoke('git:push', projectId),
   gitPull: (projectId, fromBranch) => ipcRenderer.invoke('git:pull', projectId, fromBranch),

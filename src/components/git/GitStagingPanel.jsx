@@ -4,6 +4,7 @@ import {
   gitStageFile, gitUnstageFile,
   gitStageAll, gitUnstageAll,
   gitCommit, gitPush, gitPull,
+  gitDiscardFile,
   getBranches,
 } from '../../ipc';
 
@@ -21,10 +22,8 @@ const STATUS_COLOR = {
 //               false → render as unstaged (click = stage)
 // Needed for files that are BOTH staged AND have working-tree changes — they appear
 // in both sections with opposite behaviours.
-function FileRow({ file, viewAsStaged, onStage, onUnstage, loading, diffStats, onDiffSelect }) {
-  // Pin the full untruncated path here — never derive it from rendered text.
+function FileRow({ file, viewAsStaged, onStage, onUnstage, onDiscard, loading, diffStats, onDiffSelect }) {
   const fullPath = file.path;
-  // If viewAsStaged is explicitly supplied use it; otherwise fall back to the file flag.
   const effectivelyStaged = viewAsStaged !== undefined ? viewAsStaged : file.isStaged;
   const statusChar = file.isUntracked ? '?' : (effectivelyStaged ? file.x : file.y);
   const colorClass = STATUS_COLOR[statusChar] || 'text-slate-400';
@@ -32,9 +31,40 @@ function FileRow({ file, viewAsStaged, onStage, onUnstage, loading, diffStats, o
   const isRemoving = loading === 'unstage-' + fullPath;
   const added = diffStats?.added || 0;
   const deleted = diffStats?.deleted || 0;
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1.5"
+        style={{ background: '#1a0a0a', borderLeft: '2px solid #f85149' }}
+      >
+        <span className="text-xs text-slate-300 flex-1 truncate">
+          Discard <span className="text-slate-100 font-mono">{fullPath.split('/').pop()}</span>?
+        </span>
+        <button
+          onClick={() => { onDiscard(fullPath); setConfirming(false); }}
+          className="text-[10px] font-semibold px-2 py-0.5 rounded flex-shrink-0"
+          style={{ background: '#f85149', color: '#fff' }}
+        >
+          Discard
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          className="text-[10px] px-2 py-0.5 rounded flex-shrink-0 text-slate-400 hover:text-slate-200"
+          style={{ background: '#1c2433' }}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-800/40 group transition-colors">
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-800/40 group transition-colors"
+      onContextMenu={(e) => { e.preventDefault(); setConfirming(true); }}
+    >
       {/* Stage toggle */}
       <button
         onClick={() => {
@@ -65,7 +95,7 @@ function FileRow({ file, viewAsStaged, onStage, onUnstage, loading, diffStats, o
         {STATUS_LABEL[statusChar] || statusChar}
       </span>
 
-      {/* File path — click to scroll diff. CSS truncation only; data comes from fullPath. */}
+      {/* File path */}
       <button
         onClick={() => onDiffSelect?.(fullPath)}
         className="text-xs text-slate-300 truncate font-mono flex-1 min-w-0 text-left hover:text-violet-300 transition-colors"
@@ -81,6 +111,17 @@ function FileRow({ file, viewAsStaged, onStage, onUnstage, loading, diffStats, o
           {deleted > 0 && <span style={{ color: '#f85149' }}>-{deleted}</span>}
         </span>
       )}
+
+      {/* Hover discard button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setConfirming(true); }}
+        title="Discard changes"
+        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-4 h-4 rounded flex-shrink-0 hover:text-red-400 text-slate-600"
+      >
+        <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -174,6 +215,20 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
       setError(err.message || 'Stage all failed');
     } finally {
       await delay(150);
+      await refresh();
+      setLoading(null);
+    }
+  }
+
+  async function handleDiscard(filePath) {
+    setLoading('discard-' + filePath);
+    setError('');
+    try {
+      const result = await gitDiscardFile(projectId, filePath);
+      if (result && !result.success) setError(result.error || 'Discard failed');
+    } catch (err) {
+      setError(err.message || 'Discard failed');
+    } finally {
       await refresh();
       setLoading(null);
     }
@@ -316,6 +371,7 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
                     viewAsStaged={true}
                     onStage={handleStage}
                     onUnstage={handleUnstage}
+                    onDiscard={handleDiscard}
                     loading={loading}
                     diffStats={fileDiffStats.find((s) => s.path === f.path)}
                     onDiffSelect={onDiffSelect}
@@ -337,6 +393,7 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
                     viewAsStaged={false}
                     onStage={handleStage}
                     onUnstage={handleUnstage}
+                    onDiscard={handleDiscard}
                     loading={loading}
                     diffStats={fileDiffStats.find((s) => s.path === f.path)}
                     onDiffSelect={onDiffSelect}

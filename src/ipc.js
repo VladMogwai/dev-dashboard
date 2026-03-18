@@ -26,6 +26,7 @@ export const getGitInfo = (path) => api.getGitInfo(path);
 export const getBranches = (path) => api.getBranches(path);
 export const checkoutBranch = (path, branch) => api.checkoutBranch(path, branch);
 export const createBranch = (path, branchName, setUpstream) => api.createBranch(path, branchName, setUpstream);
+export const getDefaultBranch = (path) => api.gitGetDefaultBranch(path);
 
 export const getInstalledEditors = () => api.getInstalledEditors();
 export const openInEditor = (editor, path) => api.openInEditor(editor, path);
@@ -76,6 +77,7 @@ export const gitStageFile = (projectId, filePath) => api.gitStageFile(projectId,
 export const gitUnstageFile = (projectId, filePath) => api.gitUnstageFile(projectId, filePath);
 export const gitStageAll = (projectId) => api.gitStageAll(projectId);
 export const gitUnstageAll = (projectId) => api.gitUnstageAll(projectId);
+export const gitDiscardFile = (projectId, filePath) => api.gitDiscardFile(projectId, filePath);
 export const gitCommit = (projectId, summary, description) => api.gitCommit(projectId, summary, description);
 export const gitPush = (projectId) => api.gitPush(projectId);
 export const gitPull = (projectId, fromBranch) => api.gitPull(projectId, fromBranch);

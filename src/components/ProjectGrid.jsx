@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ProjectTile from './ProjectTile';
 import { getAppVersion, checkForUpdates } from '../ipc';
 
@@ -17,16 +17,31 @@ export default function ProjectGrid({
   onRebuildInstall,
   runningCount,
   updateState,
+  sidebarFixed,
+  onToggleSidebarFixed,
 }) {
   const [rebuilding, setRebuilding] = useState(false);
   const [checking, setChecking] = useState(false);
   const appVersion = getAppVersion();
   const [dragOverId, setDragOverId] = useState(null);
   const dragIdRef = useRef(null);
+  const titlebarRef = useRef(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    const el = titlebarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setIsNarrow(entry.contentRect.width < 420);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
     <div className="flex flex-col h-full">
       {/* Titlebar — only the empty strip is draggable, not the buttons */}
       <div
+        ref={titlebarRef}
         className="flex items-center px-5 border-b border-slate-700/50"
         style={{ height: 52, minHeight: 52, WebkitAppRegion: 'drag' }}
       >
@@ -34,44 +49,44 @@ export default function ProjectGrid({
         <div style={{ width: 72, flexShrink: 0 }} />
 
         {/* Title */}
-        <div className="flex items-center gap-2 select-none" style={{ WebkitAppRegion: 'drag' }}>
+        <div className="flex items-center gap-2 select-none" style={{ WebkitAppRegion: 'drag', minWidth: 0, overflow: 'hidden' }}>
           <div className="w-6 h-6 rounded-md bg-violet-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M3 12h18M3 17h18" />
             </svg>
           </div>
-          <span className="text-sm font-semibold text-slate-100">Polvoo</span>
-          <span className="text-xs text-slate-500 ml-1">
+          <span className="text-sm font-semibold text-slate-100 flex-shrink-0">Polvoo</span>
+          <span className="text-xs text-slate-500 ml-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
             {projects.length} project{projects.length !== 1 ? 's' : ''}
           </span>
-          {appVersion && (
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (checking) return;
-                setChecking(true);
-                await checkForUpdates();
-                setTimeout(() => setChecking(false), 3000);
-              }}
-              title={checking ? 'Checking for updates…' : 'Check for updates'}
-              style={{ WebkitAppRegion: 'no-drag' }}
-              className="ml-1 text-[10px] text-slate-700 hover:text-slate-500 transition-colors select-none"
-            >
-              {updateState === 'available' || updateState === 'downloaded'
-                ? <span className="text-violet-500">↑ update</span>
-                : checking
-                  ? <span className="text-slate-600">checking…</span>
-                  : `v${appVersion}`
-              }
-            </button>
-          )}
         </div>
 
         {/* Spacer fills the drag region */}
         <div className="flex-1" style={{ WebkitAppRegion: 'drag' }} />
 
         {/* Buttons — must opt out of drag */}
-        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag', flexShrink: 0 }}>
+          {/* Fixed sidebar toggle */}
+          <button
+            onClick={onToggleSidebarFixed}
+            title={sidebarFixed ? 'Sidebar: fixed width (click to make flexible)' : 'Sidebar: flexible width (click to fix)'}
+            className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-colors ${
+              sidebarFixed
+                ? 'bg-violet-600/20 text-violet-400 border-violet-700 hover:bg-violet-600/30'
+                : 'bg-slate-800 text-slate-600 border-slate-700 hover:bg-slate-700 hover:text-slate-300'
+            }`}
+          >
+            {sidebarFixed ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            )}
+          </button>
+
           {/* Rebuild & install */}
           {onRebuildInstall && (
             <button
@@ -98,9 +113,26 @@ export default function ProjectGrid({
           )}
           {/* Settings button */}
           <button
-            onClick={onOpenSettings}
-            title="Settings"
-            className="flex items-center justify-center w-7 h-7 bg-slate-800 hover:bg-slate-700 text-slate-600 hover:text-slate-300 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (checking) return;
+              setChecking(true);
+              onOpenSettings();
+              await checkForUpdates();
+              setTimeout(() => setChecking(false), 3000);
+            }}
+            title={
+              updateState === 'available' || updateState === 'downloaded'
+                ? `Settings — update available!`
+                : appVersion
+                  ? `Settings (v${appVersion})`
+                  : 'Settings'
+            }
+            className={`flex items-center justify-center w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg border transition-colors ${
+              updateState === 'available' || updateState === 'downloaded'
+                ? 'text-violet-400 hover:text-violet-300 border-violet-700 hover:border-violet-500'
+                : 'text-slate-600 hover:text-slate-300 border-slate-700 hover:border-slate-600'
+            }`}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -125,12 +157,15 @@ export default function ProjectGrid({
           </button>
           <button
             onClick={onAddProject}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors whitespace-nowrap"
+            title="Add Project"
+            className={`flex items-center justify-center bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors ${
+              isNarrow ? 'w-7 h-7' : 'gap-1.5 px-3 py-1.5'
+            }`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Add Project
+            {!isNarrow && <span className="whitespace-nowrap">Add Project</span>}
           </button>
         </div>
       </div>
