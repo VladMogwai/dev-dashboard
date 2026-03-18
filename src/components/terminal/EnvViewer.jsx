@@ -487,7 +487,15 @@ function ViewTable({ vars, absPath, keyWidth, isWritable, revealed, onToggleReve
 
               {/* Value cell */}
               <td className="px-3 py-1.5 font-mono text-slate-400 break-all">
-                {v.isSecret ? (
+                {v.value?.startsWith('op://') ? (
+                  <div className="flex items-center gap-1.5" title="Managed by 1Password">
+                    {/* 1Password logo mark */}
+                    <svg className="w-3 h-3 flex-shrink-0 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a2 2 0 110 4 2 2 0 010-4zm0 5.5c2.761 0 5 1.343 5 3v.5H7v-.5c0-1.657 2.239-3 5-3z"/>
+                    </svg>
+                    <span className="text-sky-600/80 text-[10px] truncate">{v.value}</span>
+                  </div>
+                ) : v.isSecret ? (
                   <div className="flex items-center gap-1.5">
                     <span className="text-slate-600 select-none">
                       {isRevealed ? v.value : '••••••••'}

@@ -2,11 +2,16 @@
 
 const { exec, execFile } = require("child_process");
 const { promisify } = require("util");
+const { detectSSHAgentSocket } = require("./onepassword");
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-// When Electron launches it can have a stripped PATH — add all common locations
+const _opAgentSock = detectSSHAgentSocket();
+
+// When Electron launches it can have a stripped PATH — add all common locations.
+// If 1Password SSH agent is running, inject its socket so git push/pull/clone
+// work with keys stored in 1Password without any extra setup.
 const GIT_ENV = {
   ...process.env,
   PATH: [
@@ -19,6 +24,7 @@ const GIT_ENV = {
     "/sbin",
     process.env.PATH || "",
   ].join(":"),
+  ...(_opAgentSock ? { SSH_AUTH_SOCK: _opAgentSock } : {}),
 };
 
 async function run(cmd, cwd) {

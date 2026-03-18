@@ -357,12 +357,12 @@ ipcMain.handle("projects:get-scripts", (_, projectId) => {
 
 // ─── IPC: Process management ──────────────────────────────────────────────────
 
-ipcMain.handle("process:start", (_, projectId) => {
+ipcMain.handle("process:start", async (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { success: false, error: "Project not found" };
 
   try {
-    processManager.start(
+    await processManager.start(
       project,
       (type, data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -409,7 +409,7 @@ ipcMain.handle("process:restart", (_, projectId) => {
           mainWindow.webContents.send("process:status-update", { projectId, status });
         }
       },
-    );
+    ).catch(console.error);
   }, 800);
 
   return { success: true };

@@ -7,6 +7,9 @@ const fs = require('fs');
 const EventEmitter = require('events');
 
 const ptyManager = require('./pty');
+const { detectSSHAgentSocket, resolveOpRefs } = require('./onepassword');
+
+const _opAgentSock = detectSSHAgentSocket();
 
 // Emits 'ports-updated' when a project's detected port set changes
 const portEvents = new EventEmitter();
@@ -162,7 +165,7 @@ function loadEnv(envFilePath) {
   return env;
 }
 
-function start(project, onData, onStatusChange) {
+async function start(project, onData, onStatusChange) {
   if (running.has(project.id)) {
     stop(project.id);
   }
@@ -173,7 +176,9 @@ function start(project, onData, onStatusChange) {
   const cmd = (project.startCommand || '').trim();
   if (!cmd) throw new Error('Empty start command');
 
-  const envVars = loadEnv(project.envFile);
+  // Resolve op:// references from 1Password before spawning
+  const rawEnvVars = loadEnv(project.envFile);
+  const envVars = await resolveOpRefs(rawEnvVars);
 
   // Use captured shell env (nvm, fnm, pyenv, etc.) with fallback to FULL_PATH
   const shellEnv = ptyManager.getCapturedEnv();
@@ -183,6 +188,8 @@ function start(project, onData, onStatusChange) {
     PATH: shellEnv.PATH || FULL_PATH,
     ...envVars,
     FORCE_COLOR: '1',
+    // If 1Password SSH agent is running, make it available to the process
+    ...(_opAgentSock ? { SSH_AUTH_SOCK: _opAgentSock } : {}),
   };
 
   // Use shell: true so inline env vars (PORT=3000 npm run dev), pipes, etc. work correctly
@@ -309,7 +316,10 @@ function runCommand(project, command, onData, onCommandStatus) {
   const child = spawn(command, [], {
     shell: true,
     cwd: project.path,
-    env,
+    env: {
+      ...env,
+      ...(_opAgentSock ? { SSH_AUTH_SOCK: _opAgentSock } : {}),
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
