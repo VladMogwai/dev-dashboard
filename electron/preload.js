@@ -130,11 +130,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitPush: (projectId) => ipcRenderer.invoke('git:push', projectId),
   gitPull: (projectId, fromBranch) => ipcRenderer.invoke('git:pull', projectId, fromBranch),
 
+  // Storage paths
+  storageGetPaths: () => ipcRenderer.invoke('storage:get-paths'),
+  storageShowInFinder: (filePath) => ipcRenderer.invoke('storage:show-in-finder', filePath),
+
   // Command history
   historyGet: (projectId) => ipcRenderer.invoke('history:get', projectId),
   historyAdd: (projectId, command) => ipcRenderer.invoke('history:add', projectId, command),
   historyDelete: (projectId, command) => ipcRenderer.invoke('history:delete', projectId, command),
   historyClear: (projectId) => ipcRenderer.invoke('history:clear', projectId),
+  historyClearAll: () => ipcRenderer.invoke('history:clearAll'),
+  historyGetStats: () => ipcRenderer.invoke('history:getStats'),
+  historyGetLimit: () => ipcRenderer.invoke('history:getLimit'),
+  historySetLimit: (maxEntries) => ipcRenderer.invoke('history:setLimit', maxEntries),
 
   // Environment vars
   envLoad: (projectId) => ipcRenderer.invoke('env:load', projectId),

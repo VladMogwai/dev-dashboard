@@ -3,12 +3,35 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_HISTORY = 500;
+const DEFAULT_MAX_HISTORY = 500;
 
-function getHistoryPath(userDataPath, projectId) {
+function getHistoryDir(userDataPath) {
   const dir = path.join(userDataPath, 'history');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, `${projectId}.json`);
+  return dir;
+}
+
+function getHistoryPath(userDataPath, projectId) {
+  return path.join(getHistoryDir(userDataPath), `${projectId}.json`);
+}
+
+function getLimitPath(userDataPath) {
+  return path.join(userDataPath, 'history-settings.json');
+}
+
+function getLimit(userDataPath) {
+  try {
+    const data = JSON.parse(fs.readFileSync(getLimitPath(userDataPath), 'utf8'));
+    return data.maxEntries ?? DEFAULT_MAX_HISTORY;
+  } catch {
+    return DEFAULT_MAX_HISTORY;
+  }
+}
+
+function setLimit(userDataPath, maxEntries) {
+  try {
+    fs.writeFileSync(getLimitPath(userDataPath), JSON.stringify({ maxEntries }), 'utf8');
+  } catch {}
 }
 
 function load(userDataPath, projectId) {
@@ -26,9 +49,10 @@ function save(userDataPath, projectId, history) {
 }
 
 function add(userDataPath, projectId, command) {
+  const limit = getLimit(userDataPath);
   let h = load(userDataPath, projectId).filter(c => c !== command);
   h.push(command);
-  if (h.length > MAX_HISTORY) h = h.slice(-MAX_HISTORY);
+  if (limit > 0 && h.length > limit) h = h.slice(-limit);
   save(userDataPath, projectId, h);
 }
 
@@ -40,4 +64,31 @@ function clear(userDataPath, projectId) {
   save(userDataPath, projectId, []);
 }
 
-module.exports = { load, add, deleteCmd, clear };
+function clearAll(userDataPath) {
+  try {
+    const dir = getHistoryDir(userDataPath);
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      fs.writeFileSync(path.join(dir, f), '[]', 'utf8');
+    }
+  } catch {}
+}
+
+function getStats(userDataPath) {
+  try {
+    const dir = getHistoryDir(userDataPath);
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    let totalEntries = 0;
+    for (const f of files) {
+      try {
+        const entries = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        if (Array.isArray(entries)) totalEntries += entries.length;
+      } catch {}
+    }
+    return { totalEntries, projectCount: files.length };
+  } catch {
+    return { totalEntries: 0, projectCount: 0 };
+  }
+}
+
+module.exports = { load, add, deleteCmd, clear, clearAll, getStats, getLimit, setLimit };

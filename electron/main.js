@@ -1001,6 +1001,24 @@ ipcMain.handle("history:clear", (_, projectId) => {
   return true;
 });
 
+ipcMain.handle("history:clearAll", () => {
+  historyManager.clearAll(app.getPath("userData"));
+  return true;
+});
+
+ipcMain.handle("history:getStats", () => {
+  return historyManager.getStats(app.getPath("userData"));
+});
+
+ipcMain.handle("history:getLimit", () => {
+  return historyManager.getLimit(app.getPath("userData"));
+});
+
+ipcMain.handle("history:setLimit", (_, maxEntries) => {
+  historyManager.setLimit(app.getPath("userData"), maxEntries);
+  return true;
+});
+
 // ─── IPC: Environment variables ───────────────────────────────────────────────
 
 const envWatchers = new Map();
@@ -1349,6 +1367,19 @@ ipcMain.handle("settings:set-launch-at-login", (_, value) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle("storage:get-paths", () => {
+  const userData = app.getPath("userData");
+  return {
+    projects: path.join(userData, "projects.json"),
+    historyDir: path.join(userData, "history"),
+    historySettings: path.join(userData, "history-settings.json"),
+  };
+});
+
+ipcMain.handle("storage:show-in-finder", (_, filePath) => {
+  shell.showItemInFolder(filePath);
 });
 
 ipcMain.handle("settings:clear-data", async () => {

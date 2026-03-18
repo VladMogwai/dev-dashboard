@@ -52,6 +52,12 @@ export default function SettingsPanel({ onClose }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  // Data & Storage
+  const [historyStats, setHistoryStats] = useState({ totalEntries: 0, projectCount: 0 });
+  const [historyLimit, setHistoryLimit] = useState(500);
+  const [clearingHistory, setClearingHistory] = useState(false);
+  const [storagePaths, setStoragePaths] = useState(null);
+
   // Slide-in animation
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true));
@@ -66,6 +72,7 @@ export default function SettingsPanel({ onClose }) {
   useEffect(() => {
     loadPerms();
     loadGeneral();
+    loadStorageStats();
   }, []);
 
   // Auto-refresh permissions when the window regains focus (e.g. user
@@ -91,6 +98,36 @@ export default function SettingsPanel({ onClose }) {
     try {
       const res = await window.electronAPI.getGeneralSettings();
       if (res) setGeneral(res);
+    } catch {}
+  }
+
+  async function loadStorageStats() {
+    try {
+      const [stats, limit, paths] = await Promise.all([
+        window.electronAPI.historyGetStats(),
+        window.electronAPI.historyGetLimit(),
+        window.electronAPI.storageGetPaths(),
+      ]);
+      if (stats) setHistoryStats(stats);
+      if (limit != null) setHistoryLimit(limit);
+      if (paths) setStoragePaths(paths);
+    } catch {}
+  }
+
+  async function handleClearHistory() {
+    setClearingHistory(true);
+    try {
+      await window.electronAPI.historyClearAll();
+      await loadStorageStats();
+    } catch {}
+    setClearingHistory(false);
+  }
+
+  async function handleSetHistoryLimit(value) {
+    const parsed = value === 'unlimited' ? 0 : parseInt(value, 10);
+    setHistoryLimit(parsed);
+    try {
+      await window.electronAPI.historySetLimit(parsed);
     } catch {}
   }
 
@@ -241,6 +278,102 @@ export default function SettingsPanel({ onClose }) {
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <div className="mx-5 border-t border-slate-700/40" />
+
+          {/* ── Data & Storage section ── */}
+          <section className="px-5 pt-4 pb-4">
+            <h2 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Data &amp; Storage</h2>
+
+            <div className="border border-slate-700/60 rounded-lg overflow-hidden">
+              {/* Terminal History */}
+              <div className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-200 font-medium">Terminal History</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Commands saved across all projects</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs text-slate-400 font-mono bg-slate-800 border border-slate-700 px-2 py-0.5 rounded">
+                      {historyStats.totalEntries} {historyStats.totalEntries === 1 ? 'entry' : 'entries'}
+                    </span>
+                    {storagePaths?.historyDir && (
+                      <button
+                        onClick={() => window.electronAPI.storageShowInFinder(storagePaths.historyDir)}
+                        className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 rounded-md transition-colors"
+                      >
+                        Show in Finder
+                      </button>
+                    )}
+                    <button
+                      onClick={handleClearHistory}
+                      disabled={clearingHistory || historyStats.totalEntries === 0}
+                      className="px-2.5 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {clearingHistory ? 'Clearing…' : 'Clear'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Max entries limit */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/40">
+                  <div>
+                    <p className="text-xs text-slate-300 font-medium">Max entries to keep</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Per project, older entries are removed first</p>
+                  </div>
+                  <select
+                    value={historyLimit === 0 ? 'unlimited' : String(historyLimit)}
+                    onChange={(e) => handleSetHistoryLimit(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-200 outline-none focus:border-violet-500/60 transition-colors"
+                  >
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                    <option value="unlimited">Unlimited</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* History Settings */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/40">
+                <div>
+                  <p className="text-sm text-slate-200 font-medium">History Settings</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Max entries limit preference</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-mono">history-settings.json</span>
+                  {storagePaths?.historySettings && (
+                    <button
+                      onClick={() => window.electronAPI.storageShowInFinder(storagePaths.historySettings)}
+                      className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 rounded-md transition-colors"
+                    >
+                      Show in Finder
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Projects data */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/40">
+                <div>
+                  <p className="text-sm text-slate-200 font-medium">Project Data</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Saved projects, pinned commands, settings</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-mono">projects.json</span>
+                  {storagePaths?.projects && (
+                    <button
+                      onClick={() => window.electronAPI.storageShowInFinder(storagePaths.projects)}
+                      className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 rounded-md transition-colors"
+                    >
+                      Show in Finder
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 

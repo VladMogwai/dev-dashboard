@@ -12,6 +12,45 @@ import {
 } from '../../ipc';
 import '@xterm/xterm/css/xterm.css';
 
+const KNOWN_COMMANDS = new Set([
+  'cd', 'ls', 'll', 'la', 'pwd', 'mkdir', 'rm', 'cp', 'mv', 'touch', 'cat',
+  'echo', 'grep', 'find', 'awk', 'sed', 'sort', 'head', 'tail', 'wc', 'diff',
+  'chmod', 'chown', 'sudo', 'su', 'env', 'export', 'source', 'which', 'type',
+  'ps', 'kill', 'killall', 'top', 'htop', 'open', 'clear', 'history', 'exit',
+  'man', 'less', 'more', 'printf', 'read', 'set', 'unset', 'exec', 'eval',
+  'alias', 'unalias', 'test', 'true', 'false', 'return', 'logout',
+  'git', 'npm', 'npx', 'yarn', 'pnpm', 'node', 'ts-node', 'tsc',
+  'python', 'python3', 'pip', 'pip3', 'ruby', 'gem', 'bundle', 'rails',
+  'make', 'cmake', 'cargo', 'rustc', 'go', 'java', 'javac', 'mvn', 'gradle',
+  'docker', 'docker-compose', 'kubectl', 'helm', 'terraform', 'ansible',
+  'brew', 'apt', 'apt-get', 'yum', 'dnf', 'pacman', 'snap',
+  'curl', 'wget', 'ssh', 'scp', 'rsync', 'tar', 'zip', 'unzip', 'gzip',
+  'heroku', 'vercel', 'netlify', 'firebase', 'aws', 'gcloud', 'az',
+  'code', 'vim', 'nvim', 'nano', 'code', 'subl',
+  'sh', 'bash', 'zsh', 'fish', 'xargs', 'tee', 'watch', 'nohup',
+  'ping', 'curl', 'dig', 'nslookup', 'netstat', 'lsof', 'ifconfig', 'ip',
+]);
+
+function isShellCommand(cmd) {
+  const trimmed = cmd.trim();
+  if (!trimmed || trimmed.length < 2) return false;
+
+  // Starts with path prefix
+  if (/^[./~]/.test(trimmed)) return true;
+
+  // Contains typical shell characters
+  if (/[-=|&><$`!;]/.test(trimmed)) return true;
+
+  const firstWord = trimmed.split(/\s+/)[0].toLowerCase();
+  if (KNOWN_COMMANDS.has(firstWord)) return true;
+
+  // Single word with no spaces — likely a binary name
+  if (!/\s/.test(trimmed) && /^[a-zA-Z0-9_-]+$/.test(trimmed)) return true;
+
+  // Reject: multiple plain words with no command-like characters (natural language)
+  return false;
+}
+
 export default function BlockTerminal({ projectId, project: projectProp, type, active }) {
   const containerRef = useRef(null);
   const historyBtnRef = useRef(null);
@@ -34,6 +73,7 @@ export default function BlockTerminal({ projectId, project: projectProp, type, a
   const { dispose, sendInput, fit } = useTerminal(containerRef, projectId, type, active, {
     onCommand: async (cmd) => {
       try {
+        if (!isShellCommand(cmd)) return;
         await historyAdd(projectId, cmd);
         const h = await historyGet(projectId);
         setHistory(h || []);
@@ -106,9 +146,11 @@ export default function BlockTerminal({ projectId, project: projectProp, type, a
 
     // Persist to history
     try {
-      await historyAdd(projectId, cmd);
-      const h = await historyGet(projectId);
-      setHistory(h || []);
+      if (isShellCommand(cmd)) {
+        await historyAdd(projectId, cmd);
+        const h = await historyGet(projectId);
+        setHistory(h || []);
+      }
     } catch {}
   }, [sendInput, projectId]);
 

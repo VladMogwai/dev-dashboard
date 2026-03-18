@@ -26,7 +26,7 @@ export default function App() {
   const [runningCount, setRunningCount] = useState(0);
   const [xcodeBannerVisible, setXcodeBannerVisible] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
-  const [sidebarFixed, setSidebarFixed] = useState(() => localStorage.getItem('sidebarFixed') === 'true');
+  const [sidebarFixed, setSidebarFixed] = useState(() => localStorage.getItem('sidebarFixed') !== 'false');
   const [errorCounts, setErrorCounts] = useState({});
   const viewingLogsForRef = useRef(null);
   const [updateStatus, setUpdateStatus] = useState(null); // { state, version?, percent? }
