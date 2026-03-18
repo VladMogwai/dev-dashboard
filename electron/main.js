@@ -7,6 +7,7 @@ const {
   dialog,
   systemPreferences,
   shell,
+  session,
 } = require("electron");
 const { exec } = require("child_process");
 const { promisify } = require("util");
@@ -102,6 +103,17 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();
   } else {
+    // Apply Content Security Policy only in production (dev uses Vite HMR which needs looser rules)
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self' data:;"
+          ],
+        },
+      });
+    });
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 

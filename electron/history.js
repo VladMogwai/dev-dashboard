@@ -5,6 +5,17 @@ const path = require('path');
 
 const DEFAULT_MAX_HISTORY = 500;
 
+// Mask credentials that might appear in commands before saving to disk
+const CREDENTIAL_URL_RE = /([a-z][a-z0-9+\-.]*:\/\/[^:@/\s]+):[^@\s]+@/gi;
+const CREDENTIAL_FLAG_RE = /(--(?:password|token|secret|api[_-]?key|auth|credential|pwd|passwd)=)\S+/gi;
+
+function maskCredentials(cmd) {
+  if (typeof cmd !== 'string') return cmd;
+  return cmd
+    .replace(CREDENTIAL_URL_RE, '$1:***@')
+    .replace(CREDENTIAL_FLAG_RE, '$1***');
+}
+
 function getHistoryDir(userDataPath) {
   const dir = path.join(userDataPath, 'history');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -50,8 +61,9 @@ function save(userDataPath, projectId, history) {
 
 function add(userDataPath, projectId, command) {
   const limit = getLimit(userDataPath);
-  let h = load(userDataPath, projectId).filter(c => c !== command);
-  h.push(command);
+  const masked = maskCredentials(command);
+  let h = load(userDataPath, projectId).filter(c => c !== masked);
+  h.push(masked);
   if (limit > 0 && h.length > limit) h = h.slice(-limit);
   save(userDataPath, projectId, h);
 }

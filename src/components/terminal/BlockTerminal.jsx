@@ -239,7 +239,8 @@ export default function BlockTerminal({ projectId, project: projectProp, type, a
       // Electron 32+ requires webUtils.getPathForFile(); File.path is deprecated and returns ""
       const p = window.electronAPI?.getPathForFile?.(f) || f.path || f.name;
       console.log('FILE:', f.name, 'PATH:', p);
-      return p && p.includes(' ') ? `"${p}"` : p;
+      // POSIX single-quote escaping: handles spaces, $, `, ;, | and other special chars
+      return p ? `'${p.replace(/'/g, "'\\''")}'` : null;
     }).filter(Boolean).join(' ');
     console.log('PATHS TO INSERT:', paths);
     if (!paths) return;
