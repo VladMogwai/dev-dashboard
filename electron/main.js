@@ -1,24 +1,31 @@
-'use strict';
+"use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, systemPreferences, shell } = require('electron');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  systemPreferences,
+  shell,
+} = require("electron");
+const { exec } = require("child_process");
+const { promisify } = require("util");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
 const execAsync = promisify(exec);
 
-const processManager = require('./processes');
-const ptyManager = require('./pty');
-const gitManager = require('./git');
-const dockerManager = require('./docker');
-const updater = require('./updater');
-const editorManager = require('./editors');
-const terminalManager = require('./terminals');
-const settings = require('./settings');
-const historyManager = require('./history');
-const envLoader = require('./envLoader');
+const processManager = require("./processes");
+const ptyManager = require("./pty");
+const gitManager = require("./git");
+const dockerManager = require("./docker");
+const updater = require("./updater");
+const editorManager = require("./editors");
+const terminalManager = require("./terminals");
+const settings = require("./settings");
+const historyManager = require("./history");
+const envLoader = require("./envLoader");
 
 const isDev = !app.isPackaged;
 
@@ -31,7 +38,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   // Focus the existing window if the user tries to open a second instance.
-  app.on('second-instance', () => {
+  app.on("second-instance", () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -49,26 +56,26 @@ let dockerAvailable = false;
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
 function getProjectsFilePath() {
-  return path.join(app.getPath('userData'), 'projects.json');
+  return path.join(app.getPath("userData"), "projects.json");
 }
 
 function loadProjects() {
   try {
     if (fs.existsSync(projectsFilePath)) {
-      const raw = fs.readFileSync(projectsFilePath, 'utf8');
+      const raw = fs.readFileSync(projectsFilePath, "utf8");
       projects = JSON.parse(raw);
     }
   } catch (err) {
-    console.error('Failed to load projects:', err);
+    console.error("Failed to load projects:", err);
     projects = [];
   }
 }
 
 function saveProjects() {
   try {
-    fs.writeFileSync(projectsFilePath, JSON.stringify(projects, null, 2), 'utf8');
+    fs.writeFileSync(projectsFilePath, JSON.stringify(projects, null, 2), "utf8");
   } catch (err) {
-    console.error('Failed to save projects:', err);
+    console.error("Failed to save projects:", err);
   }
 }
 
@@ -80,11 +87,11 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0f172a',
-    titleBarStyle: 'hiddenInset',
+    backgroundColor: "#0f172a",
+    titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -92,21 +99,21 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-    // mainWindow.webContents.openDevTools();
+    mainWindow.loadURL("http://localhost:5173");
+    //mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
   // On macOS the red close button only hides the window by default.
   // We intercept it and trigger a full app quit (which fires before-quit
   // where the kill-processes dialog lives).
-  mainWindow.on('close', (event) => {
+  mainWindow.on("close", (event) => {
     event.preventDefault();
     app.quit();
   });
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
@@ -118,7 +125,7 @@ async function pollGit() {
     try {
       const info = await gitManager.getInfo(project.path);
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('git:update', { projectId: project.id, ...info });
+        mainWindow.webContents.send("git:update", { projectId: project.id, ...info });
       }
     } catch (_) {}
   }
@@ -136,7 +143,7 @@ async function pollDocker() {
   try {
     const containers = await dockerManager.listContainers();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('docker:update', { containers });
+      mainWindow.webContents.send("docker:update", { containers });
     }
   } catch {}
 }
@@ -145,7 +152,6 @@ function startDockerPolling() {
   pollDocker();
   dockerPollTimer = setInterval(pollDocker, 5000);
 }
-
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -156,9 +162,9 @@ app.whenReady().then(() => {
   createWindow();
 
   // Forward port-detection events from process stdout to the renderer
-  processManager.portEvents.on('ports-updated', ({ projectId, ports }) => {
+  processManager.portEvents.on("ports-updated", ({ projectId, ports }) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ports:updated', { projectId, ports });
+      mainWindow.webContents.send("ports:updated", { projectId, ports });
     }
   });
 
@@ -176,24 +182,24 @@ app.whenReady().then(() => {
   // Check Xcode CLT asynchronously after window is created
   setTimeout(async () => {
     try {
-      await execAsync('xcode-select -p', { timeout: 3000 });
+      await execAsync("xcode-select -p", { timeout: 3000 });
     } catch {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('system:xcode-clt-missing');
+        mainWindow.webContents.send("system:xcode-clt-missing");
       }
     }
   }, 2000);
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
 
-app.on('before-quit', async (event) => {
+app.on("before-quit", async (event) => {
   event.preventDefault();
 
   const runningCount = processManager.getRunningCount();
@@ -208,16 +214,15 @@ app.on('before-quit', async (event) => {
       shouldKill = false;
     } else {
       // Ask the user
-      const label = runningCount === 1
-        ? '1 running process'
-        : `${runningCount} running processes`;
+      const label =
+        runningCount === 1 ? "1 running process" : `${runningCount} running processes`;
 
       const result = await dialog.showMessageBox(mainWindow, {
-        type: 'question',
-        title: 'Quit Polvoo',
+        type: "question",
+        title: "Quit Polvoo",
         message: `You have ${label} started from this app.`,
-        detail: 'Do you want to stop them before quitting?',
-        buttons: ['Stop Processes & Quit', 'Quit Without Stopping', 'Cancel'],
+        detail: "Do you want to stop them before quitting?",
+        buttons: ["Stop Processes & Quit", "Quit Without Stopping", "Cancel"],
         defaultId: 0,
         cancelId: 2,
         checkboxLabel: "Don't ask again",
@@ -250,30 +255,34 @@ app.on('before-quit', async (event) => {
 
 // Returns buffered log chunks for a project so panels that mounted after the
 // process started (or crashed) can replay what happened.
-ipcMain.handle('logs:get-buffer', (_, projectId) => {
+ipcMain.handle("logs:get-buffer", (_, projectId) => {
   return processManager.getLogBuffer(projectId);
 });
 
 // ─── IPC: Projects ────────────────────────────────────────────────────────────
 
-ipcMain.handle('projects:get-all', () => {
+ipcMain.handle("projects:get-all", () => {
   return projects.map((p) => ({
     ...p,
     status: processManager.getStatus(p.id),
   }));
 });
 
-ipcMain.handle('projects:add', (_, projectData) => {
+ipcMain.handle("projects:add", (_, projectData) => {
   // Auto-detect startCommand from package.json if not provided
-  let startCommand = projectData.startCommand || '';
+  let startCommand = projectData.startCommand || "";
   if (!startCommand) {
     try {
-      const pkgPath = path.join(projectData.path, 'package.json');
+      const pkgPath = path.join(projectData.path, "package.json");
       if (fs.existsSync(pkgPath)) {
-        const scripts = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).scripts || {};
-        const priority = ['dev', 'start', 'serve', 'develop'];
+        const scripts = JSON.parse(fs.readFileSync(pkgPath, "utf8")).scripts || {};
+        const priority = ["dev", "start", "serve", "develop"];
         const found = priority.find((s) => scripts[s]);
-        startCommand = found ? `npm run ${found}` : Object.keys(scripts)[0] ? `npm run ${Object.keys(scripts)[0]}` : '';
+        startCommand = found
+          ? `npm run ${found}`
+          : Object.keys(scripts)[0]
+            ? `npm run ${Object.keys(scripts)[0]}`
+            : "";
       }
     } catch {}
   }
@@ -287,10 +296,10 @@ ipcMain.handle('projects:add', (_, projectData) => {
   };
   projects.push(project);
   saveProjects();
-  return { ...project, status: 'stopped' };
+  return { ...project, status: "stopped" };
 });
 
-ipcMain.handle('projects:remove', (_, projectId) => {
+ipcMain.handle("projects:remove", (_, projectId) => {
   if (processManager.isRunning(projectId)) processManager.stop(projectId);
   ptyManager.destroyForProject(projectId);
   projects = projects.filter((p) => p.id !== projectId);
@@ -298,7 +307,7 @@ ipcMain.handle('projects:remove', (_, projectId) => {
   return true;
 });
 
-ipcMain.handle('projects:update', (_, projectId, updates) => {
+ipcMain.handle("projects:update", (_, projectId, updates) => {
   const idx = projects.findIndex((p) => p.id === projectId);
   if (idx !== -1) {
     projects[idx] = { ...projects[idx], ...updates };
@@ -308,7 +317,7 @@ ipcMain.handle('projects:update', (_, projectId, updates) => {
   return null;
 });
 
-ipcMain.handle('projects:reorder', (_, orderedIds) => {
+ipcMain.handle("projects:reorder", (_, orderedIds) => {
   const map = new Map(projects.map((p) => [p.id, p]));
   const reordered = orderedIds.map((id) => map.get(id)).filter(Boolean);
   // append any projects not in the orderedIds list (safety)
@@ -321,13 +330,13 @@ ipcMain.handle('projects:reorder', (_, orderedIds) => {
   return true;
 });
 
-ipcMain.handle('projects:get-scripts', (_, projectId) => {
+ipcMain.handle("projects:get-scripts", (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return {};
   try {
-    const pkgPath = path.join(project.path, 'package.json');
+    const pkgPath = path.join(project.path, "package.json");
     if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
       return pkg.scripts || {};
     }
   } catch {}
@@ -336,23 +345,23 @@ ipcMain.handle('projects:get-scripts', (_, projectId) => {
 
 // ─── IPC: Process management ──────────────────────────────────────────────────
 
-ipcMain.handle('process:start', (_, projectId) => {
+ipcMain.handle("process:start", (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+  if (!project) return { success: false, error: "Project not found" };
 
   try {
     processManager.start(
       project,
       (type, data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('log:output', { projectId, type, data });
+          mainWindow.webContents.send("log:output", { projectId, type, data });
         }
       },
       (status) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process:status-update', { projectId, status });
+          mainWindow.webContents.send("process:status-update", { projectId, status });
         }
-      }
+      },
     );
     return { success: true };
   } catch (err) {
@@ -360,7 +369,7 @@ ipcMain.handle('process:start', (_, projectId) => {
   }
 });
 
-ipcMain.handle('process:stop', (_, projectId) => {
+ipcMain.handle("process:stop", (_, projectId) => {
   try {
     processManager.stop(projectId);
     return { success: true };
@@ -369,9 +378,9 @@ ipcMain.handle('process:stop', (_, projectId) => {
   }
 });
 
-ipcMain.handle('process:restart', (_, projectId) => {
+ipcMain.handle("process:restart", (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+  if (!project) return { success: false, error: "Project not found" };
 
   processManager.stop(projectId);
 
@@ -380,23 +389,23 @@ ipcMain.handle('process:restart', (_, projectId) => {
       project,
       (type, data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('log:output', { projectId, type, data });
+          mainWindow.webContents.send("log:output", { projectId, type, data });
         }
       },
       (status) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process:status-update', { projectId, status });
+          mainWindow.webContents.send("process:status-update", { projectId, status });
         }
-      }
+      },
     );
   }, 800);
 
   return { success: true };
 });
 
-ipcMain.handle('process:run-command', (_, projectId, command) => {
+ipcMain.handle("process:run-command", (_, projectId, command) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+  if (!project) return { success: false, error: "Project not found" };
 
   try {
     processManager.runCommand(
@@ -404,14 +413,18 @@ ipcMain.handle('process:run-command', (_, projectId, command) => {
       command,
       (type, data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('log:output', { projectId, type, data });
+          mainWindow.webContents.send("log:output", { projectId, type, data });
         }
       },
       (status, cmd) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('process:command-status', { projectId, command: cmd, status });
+          mainWindow.webContents.send("process:command-status", {
+            projectId,
+            command: cmd,
+            status,
+          });
         }
-      }
+      },
     );
     return { success: true };
   } catch (err) {
@@ -419,7 +432,7 @@ ipcMain.handle('process:run-command', (_, projectId, command) => {
   }
 });
 
-ipcMain.handle('process:kill-command', (_, projectId, command) => {
+ipcMain.handle("process:kill-command", (_, projectId, command) => {
   try {
     processManager.killCommand(projectId, command);
     return { success: true };
@@ -428,13 +441,13 @@ ipcMain.handle('process:kill-command', (_, projectId, command) => {
   }
 });
 
-ipcMain.handle('ports:update', (_, projectId, newPort) => {
-  const portsUtil = require('./ports');
+ipcMain.handle("ports:update", (_, projectId, newPort) => {
+  const portsUtil = require("./ports");
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false, error: 'Not found' };
+  if (!project) return { success: false, error: "Not found" };
   const port = Number(newPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    return { success: false, error: 'Invalid port number' };
+    return { success: false, error: "Invalid port number" };
   }
   const newCmd = portsUtil.setPort(project.startCommand, newPort);
   project.startCommand = newCmd;
@@ -444,7 +457,7 @@ ipcMain.handle('ports:update', (_, projectId, newPort) => {
 
 // Returns ports detected from the project's own stdout/stderr — no lsof.
 // Accurate because only text the project actually printed is matched.
-ipcMain.handle('ports:running', (_, projectId) => {
+ipcMain.handle("ports:running", (_, projectId) => {
   const ports = processManager.getProjectDetectedPorts(projectId);
   return { success: true, ports: ports.sort((a, b) => a - b) };
 });
@@ -452,12 +465,20 @@ ipcMain.handle('ports:running', (_, projectId) => {
 // Shared env with extended PATH for child_process calls
 const CHILD_ENV = {
   ...process.env,
-  PATH: ['/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin',
-         '/usr/bin', '/bin', '/usr/sbin', '/sbin', process.env.PATH || ''].join(':'),
+  PATH: [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+    process.env.PATH || "",
+  ].join(":"),
 };
 
 function parseLsofOutput(stdout) {
-  const lines = (stdout || '').trim().split('\n').slice(1);
+  const lines = (stdout || "").trim().split("\n").slice(1);
   const seen = new Set();
   const result = [];
   for (const line of lines) {
@@ -470,9 +491,12 @@ function parseLsofOutput(stdout) {
     // lsof appends "(LISTEN)" or "(ESTABLISHED)" as a separate token, so
     // we cannot rely on the last column — scan right-to-left for the first
     // column that ends with :<digits>.
-    let name = '';
+    let name = "";
     for (let i = cols.length - 1; i >= 8; i--) {
-      if (/:(\d+)$/.test(cols[i])) { name = cols[i]; break; }
+      if (/:(\d+)$/.test(cols[i])) {
+        name = cols[i];
+        break;
+      }
     }
     if (!name) continue;
     const portMatch = name.match(/:(\d+)$/);
@@ -487,11 +511,11 @@ function parseLsofOutput(stdout) {
 }
 
 function parseNetstatOutput(stdout) {
-  const lines = (stdout || '').trim().split('\n');
+  const lines = (stdout || "").trim().split("\n");
   const seen = new Set();
   const result = [];
   for (const line of lines) {
-    if (!line.includes('LISTEN')) continue;
+    if (!line.includes("LISTEN")) continue;
     const portMatch = line.match(/[.*\d]+\.(\d+)\s+[.*\d]+\.\*\s+LISTEN/);
     if (!portMatch) continue;
     const port = parseInt(portMatch[1], 10);
@@ -500,7 +524,7 @@ function parseNetstatOutput(stdout) {
     const key = `${pid}:${port}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push({ port, pid: pid || null, cmd: '' });
+    result.push({ port, pid: pid || null, cmd: "" });
   }
   return result.sort((a, b) => a.port - b.port);
 }
@@ -510,8 +534,11 @@ function parseNetstatOutput(stdout) {
 function enrichWithProjects(portList) {
   const detected = processManager.getDetectedPorts(); // [{projectId, port}]
   return portList.map((entry) => {
-    const mainMatch = projects.find((p) => p.mainPort && Number(p.mainPort) === entry.port);
-    if (mainMatch) return { ...entry, projectId: mainMatch.id, projectName: mainMatch.name };
+    const mainMatch = projects.find(
+      (p) => p.mainPort && Number(p.mainPort) === entry.port,
+    );
+    if (mainMatch)
+      return { ...entry, projectId: mainMatch.id, projectName: mainMatch.name };
     const det = detected.find((d) => d.port === entry.port);
     if (det) {
       const proj = projects.find((p) => p.id === det.projectId);
@@ -532,13 +559,15 @@ async function matchByPidTree(portList) {
   if (allRunning.length === 0) return portList;
 
   // Build pid→ppid map for the whole system in one shot
-  const { execFile } = require('child_process');
-  const { promisify } = require('util');
+  const { execFile } = require("child_process");
+  const { promisify } = require("util");
   const execFileAsync = promisify(execFile);
   let pidTree = new Map(); // pid -> ppid
   try {
-    const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid='], { env: CHILD_ENV });
-    for (const line of stdout.trim().split('\n')) {
+    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,ppid="], {
+      env: CHILD_ENV,
+    });
+    for (const line of stdout.trim().split("\n")) {
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 2) {
         const pid = parseInt(parts[0], 10);
@@ -574,46 +603,59 @@ async function matchByPidTree(portList) {
   return portList.map((entry) => {
     if (entry.projectName || !entry.pid) return entry;
     const match = findAncestorProject(entry.pid);
-    if (match) return { ...entry, projectId: match.projectId, projectName: match.projectName };
+    if (match)
+      return { ...entry, projectId: match.projectId, projectName: match.projectName };
     return entry;
   });
 }
 
 // List all TCP ports currently in LISTEN state with their PID + command
-ipcMain.handle('ports:list', async () => {
-  const { execFile } = require('child_process');
-  const { promisify } = require('util');
+ipcMain.handle("ports:list", async () => {
+  const { execFile } = require("child_process");
+  const { promisify } = require("util");
   const execFileAsync = promisify(execFile);
   const opts = { maxBuffer: 1024 * 1024 * 5, env: CHILD_ENV };
 
   // Try lsof — primary method on macOS
   // lsof exits 1 on partial permission errors but still writes valid stdout
-  let lsofOut = '';
+  let lsofOut = "";
   try {
-    ({ stdout: lsofOut } = await execFileAsync('/usr/sbin/lsof', ['-i', '-P', '-n', '-sTCP:LISTEN'], opts));
+    ({ stdout: lsofOut } = await execFileAsync(
+      "/usr/sbin/lsof",
+      ["-i", "-P", "-n", "-sTCP:LISTEN"],
+      opts,
+    ));
   } catch (err) {
-    lsofOut = err.stdout || '';
+    lsofOut = err.stdout || "";
   }
   let portList = parseLsofOutput(lsofOut);
 
   if (portList.length === 0) {
     // Fallback: lsof without -sTCP:LISTEN (older macOS compat)
-    let lsofOut2 = '';
+    let lsofOut2 = "";
     try {
-      ({ stdout: lsofOut2 } = await execFileAsync('/usr/sbin/lsof', ['-i', '-P', '-n'], opts));
+      ({ stdout: lsofOut2 } = await execFileAsync(
+        "/usr/sbin/lsof",
+        ["-i", "-P", "-n"],
+        opts,
+      ));
     } catch (err2) {
-      lsofOut2 = err2.stdout || '';
+      lsofOut2 = err2.stdout || "";
     }
     portList = parseLsofOutput(lsofOut2);
   }
 
   if (portList.length === 0) {
     // Final fallback: netstat
-    let nsOut = '';
+    let nsOut = "";
     try {
-      ({ stdout: nsOut } = await execFileAsync('/usr/sbin/netstat', ['-anv', '-p', 'tcp'], opts));
+      ({ stdout: nsOut } = await execFileAsync(
+        "/usr/sbin/netstat",
+        ["-anv", "-p", "tcp"],
+        opts,
+      ));
     } catch (err3) {
-      nsOut = err3.stdout || '';
+      nsOut = err3.stdout || "";
     }
     portList = parseNetstatOutput(nsOut);
   }
@@ -625,7 +667,13 @@ ipcMain.handle('ports:list', async () => {
     if (knownPorts.has(port)) continue;
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) continue;
-    portList.push({ port, pid: null, cmd: '', projectId: proj.id, projectName: proj.name });
+    portList.push({
+      port,
+      pid: null,
+      cmd: "",
+      projectId: proj.id,
+      projectName: proj.name,
+    });
     knownPorts.add(port);
   }
 
@@ -635,12 +683,12 @@ ipcMain.handle('ports:list', async () => {
 });
 
 // Kill process on a specific port (no PID needed)
-ipcMain.handle('ports:kill-port', async (_, port) => {
+ipcMain.handle("ports:kill-port", async (_, port) => {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    return { success: false, error: 'Invalid port number' };
+    return { success: false, error: "Invalid port number" };
   }
-  const { execFile } = require('child_process');
-  const { promisify } = require('util');
+  const { execFile } = require("child_process");
+  const { promisify } = require("util");
   const execFileAsync = promisify(execFile);
   const opts = { env: CHILD_ENV };
   try {
@@ -658,19 +706,33 @@ ipcMain.handle('ports:kill-port', async (_, port) => {
     }
 
     // Unmanaged process — use lsof + raw treeKill
-    let pidOut = '';
+    let pidOut = "";
     try {
-      ({ stdout: pidOut } = await execFileAsync('/usr/sbin/lsof', ['-ti', `:${port}`], opts));
+      ({ stdout: pidOut } = await execFileAsync(
+        "/usr/sbin/lsof",
+        ["-ti", `:${port}`],
+        opts,
+      ));
     } catch (err) {
-      pidOut = err.stdout || '';
+      pidOut = err.stdout || "";
     }
-    const pids = pidOut.trim().split('\n').map((s) => parseInt(s.trim(), 10)).filter(Boolean);
-    if (pids.length === 0) return { success: false, error: 'No process found on port ' + port };
+    const pids = pidOut
+      .trim()
+      .split("\n")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter(Boolean);
+    if (pids.length === 0)
+      return { success: false, error: "No process found on port " + port };
 
-    const treeKill = require('tree-kill');
-    await Promise.all(pids.map((pid) => new Promise((resolve) => {
-      treeKill(pid, 'SIGKILL', () => resolve());
-    })));
+    const treeKill = require("tree-kill");
+    await Promise.all(
+      pids.map(
+        (pid) =>
+          new Promise((resolve) => {
+            treeKill(pid, "SIGKILL", () => resolve());
+          }),
+      ),
+    );
 
     return { success: true, killedPids: pids };
   } catch (err) {
@@ -679,9 +741,9 @@ ipcMain.handle('ports:kill-port', async (_, port) => {
 });
 
 // Kill a process by PID (SIGTERM, then SIGKILL if needed)
-ipcMain.handle('ports:kill-pid', async (_, pid) => {
+ipcMain.handle("ports:kill-pid", async (_, pid) => {
   if (!Number.isInteger(pid) || pid <= 0) {
-    return { success: false, error: 'Invalid PID' };
+    return { success: false, error: "Invalid PID" };
   }
   try {
     // If this PID belongs to a managed project, stop via processManager
@@ -697,11 +759,13 @@ ipcMain.handle('ports:kill-pid', async (_, pid) => {
     }
 
     // Unmanaged PID — raw kill
-    const treeKill = require('tree-kill');
+    const treeKill = require("tree-kill");
     await new Promise((resolve) => {
-      treeKill(pid, 'SIGTERM', (err) => {
+      treeKill(pid, "SIGTERM", (err) => {
         if (err) {
-          try { treeKill(pid, 'SIGKILL'); } catch (_) {}
+          try {
+            treeKill(pid, "SIGKILL");
+          } catch (_) {}
         }
         resolve();
       });
@@ -712,27 +776,30 @@ ipcMain.handle('ports:kill-pid', async (_, pid) => {
   }
 });
 
-ipcMain.handle('process:get-status', (_, projectId) => {
+ipcMain.handle("process:get-status", (_, projectId) => {
   return processManager.getStatus(projectId);
 });
 
-ipcMain.handle('process:get-all-running', () => {
+ipcMain.handle("process:get-all-running", () => {
   const raw = processManager.getAllRunning();
   // Merge in project name/path for display
   return raw.map((entry) => {
     const project = projects.find((p) => p.id === entry.projectId);
     return {
       ...entry,
-      projectName: project?.name || entry.projectId || 'Unknown',
-      projectPath: project?.path || '',
+      projectName: project?.name || entry.projectId || "Unknown",
+      projectPath: project?.path || "",
     };
   });
 });
 
-ipcMain.handle('process:get-stats', async (_, pids) => {
+ipcMain.handle("process:get-stats", async (_, pids) => {
   // Only return stats for PIDs this app actually owns to prevent PID enumeration
   const ownedPids = new Set(
-    processManager.getAllRunning().map((e) => e.pid).filter(Boolean)
+    processManager
+      .getAllRunning()
+      .map((e) => e.pid)
+      .filter(Boolean),
   );
   const safePids = (pids || []).filter((p) => ownedPids.has(p));
   if (safePids.length === 0) return {};
@@ -741,7 +808,7 @@ ipcMain.handle('process:get-stats', async (_, pids) => {
 
 // ─── IPC: Git ─────────────────────────────────────────────────────────────────
 
-ipcMain.handle('git:get-info', async (_, projectPath) => {
+ipcMain.handle("git:get-info", async (_, projectPath) => {
   try {
     return await gitManager.getInfo(projectPath);
   } catch {
@@ -749,7 +816,7 @@ ipcMain.handle('git:get-info', async (_, projectPath) => {
   }
 });
 
-ipcMain.handle('git:get-branches', async (_, projectPath) => {
+ipcMain.handle("git:get-branches", async (_, projectPath) => {
   try {
     return await gitManager.getBranches(projectPath);
   } catch {
@@ -757,9 +824,9 @@ ipcMain.handle('git:get-branches', async (_, projectPath) => {
   }
 });
 
-ipcMain.handle('git:checkout', async (_, projectPath, branchName) => {
+ipcMain.handle("git:checkout", async (_, projectPath, branchName) => {
   if (!projects.find((p) => p.path === projectPath)) {
-    return { success: false, error: 'Project not found' };
+    return { success: false, error: "Project not found" };
   }
   try {
     return await gitManager.checkoutBranch(projectPath, branchName);
@@ -768,9 +835,9 @@ ipcMain.handle('git:checkout', async (_, projectPath, branchName) => {
   }
 });
 
-ipcMain.handle('git:create-branch', async (_, projectPath, branchName, setUpstream) => {
+ipcMain.handle("git:create-branch", async (_, projectPath, branchName, setUpstream) => {
   if (!projects.find((p) => p.path === projectPath)) {
-    return { success: false, error: 'Project not found' };
+    return { success: false, error: "Project not found" };
   }
   try {
     return await gitManager.createBranch(projectPath, branchName, setUpstream);
@@ -779,73 +846,117 @@ ipcMain.handle('git:create-branch', async (_, projectPath, branchName, setUpstre
   }
 });
 
-ipcMain.handle('git:getLog', async (_, projectId, limit = 100, skip = 0) => {
+ipcMain.handle("git:getLog", async (_, projectId, limit = 100, skip = 0) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { commits: [], isRepo: false };
-  try { return await gitManager.getCommitLog(project.path, limit, skip); } catch { return { commits: [], isRepo: false }; }
+  try {
+    return await gitManager.getCommitLog(project.path, limit, skip);
+  } catch {
+    return { commits: [], isRepo: false };
+  }
 });
 
-ipcMain.handle('git:getFiles', async (_, projectId, hash) => {
+ipcMain.handle("git:getFiles", async (_, projectId, hash) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return [];
-  try { return await gitManager.getCommitFiles(project.path, hash); } catch { return []; }
+  try {
+    return await gitManager.getCommitFiles(project.path, hash);
+  } catch {
+    return [];
+  }
 });
 
-ipcMain.handle('git:getDiff', async (_, projectId, hash) => {
+ipcMain.handle("git:getDiff", async (_, projectId, hash) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return '';
-  try { return await gitManager.getCommitDiff(project.path, hash); } catch { return ''; }
+  if (!project) return "";
+  try {
+    return await gitManager.getCommitDiff(project.path, hash);
+  } catch {
+    return "";
+  }
 });
 
-ipcMain.handle('git:getChanges', async (_, projectId) => {
+ipcMain.handle("git:getChanges", async (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { isRepo: false, unstaged: '', staged: '' };
-  try { return await gitManager.getWorkingTreeDiff(project.path); } catch { return { isRepo: false, unstaged: '', staged: '' }; }
+  if (!project) return { isRepo: false, unstaged: "", staged: "" };
+  try {
+    return await gitManager.getWorkingTreeDiff(project.path);
+  } catch {
+    return { isRepo: false, unstaged: "", staged: "" };
+  }
 });
 
-ipcMain.handle('git:getStagingStatus', async (_, projectId) => {
+ipcMain.handle("git:getStagingStatus", async (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { isRepo: false, files: [], branch: null };
-  try { return await gitManager.getStagingStatus(project.path); } catch { return { isRepo: false, files: [], branch: null }; }
+  try {
+    return await gitManager.getStagingStatus(project.path);
+  } catch {
+    return { isRepo: false, files: [], branch: null };
+  }
 });
 
-ipcMain.handle('git:stageFile', async (_, projectId, filePath) => {
+ipcMain.handle("git:stageFile", async (_, projectId, filePath) => {
+  console.log("[main] git:stageFile projectId=%s filePath=%s", projectId, filePath);
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false };
-  return gitManager.stageFile(project.path, filePath);
+  if (!project) {
+    console.error("[main] git:stageFile: project not found", projectId);
+    return { success: false, error: "Project not found" };
+  }
+  const result = await gitManager.stageFile(project.path, filePath);
+  if (!result.success) console.error("[main] git:stageFile result:", result);
+  return result;
 });
 
-ipcMain.handle('git:unstageFile', async (_, projectId, filePath) => {
+ipcMain.handle("git:unstageFile", async (_, projectId, filePath) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false };
-  return gitManager.unstageFile(project.path, filePath);
+  if (!project) {
+    console.error("[polvoo] unstageFile: project not found", projectId);
+    return { success: false, error: "Project not found" };
+  }
+  console.log("[polvoo] unstageFile:", project.path, filePath);
+  const result = await gitManager.unstageFile(project.path, filePath);
+  if (!result.success) console.error("[polvoo] unstageFile result:", result);
+  return result;
 });
 
-ipcMain.handle('git:stageAll', async (_, projectId) => {
+ipcMain.handle("git:stageAll", async (_, projectId) => {
+  console.log("[main] git:stageAll projectId=%s", projectId);
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false };
-  return gitManager.stageAll(project.path);
+  if (!project) {
+    console.error("[main] git:stageAll: project not found", projectId);
+    return { success: false, error: "Project not found" };
+  }
+  const result = await gitManager.stageAll(project.path);
+  if (!result.success) console.error("[main] git:stageAll result:", result);
+  return result;
 });
 
-ipcMain.handle('git:unstageAll', async (_, projectId) => {
+ipcMain.handle("git:unstageAll", async (_, projectId) => {
+  console.log("[main] git:unstageAll projectId=%s", projectId);
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false };
-  return gitManager.unstageAll(project.path);
+  if (!project) {
+    console.error("[main] git:unstageAll: project not found", projectId);
+    return { success: false, error: "Project not found" };
+  }
+  const result = await gitManager.unstageAll(project.path);
+  if (!result.success) console.error("[main] git:unstageAll result:", result);
+  return result;
 });
 
-ipcMain.handle('git:commit', async (_, projectId, summary, description) => {
+ipcMain.handle("git:commit", async (_, projectId, summary, description) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { success: false };
   return gitManager.commitChanges(project.path, summary, description);
 });
 
-ipcMain.handle('git:push', async (_, projectId) => {
+ipcMain.handle("git:push", async (_, projectId) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { success: false };
   return gitManager.pushChanges(project.path);
 });
 
-ipcMain.handle('git:pull', async (_, projectId, fromBranch) => {
+ipcMain.handle("git:pull", async (_, projectId, fromBranch) => {
   const project = projects.find((p) => p.id === projectId);
   if (!project) return { success: false };
   return gitManager.pullChanges(project.path, fromBranch || null);
@@ -853,26 +964,26 @@ ipcMain.handle('git:pull', async (_, projectId, fromBranch) => {
 
 // ─── IPC: Command history ─────────────────────────────────────────────────────
 
-ipcMain.handle('history:get', (_, projectId) => {
+ipcMain.handle("history:get", (_, projectId) => {
   if (!projects.find((p) => p.id === projectId)) return [];
-  return historyManager.load(app.getPath('userData'), projectId);
+  return historyManager.load(app.getPath("userData"), projectId);
 });
 
-ipcMain.handle('history:add', (_, projectId, command) => {
+ipcMain.handle("history:add", (_, projectId, command) => {
   if (!projects.find((p) => p.id === projectId)) return false;
-  historyManager.add(app.getPath('userData'), projectId, command);
+  historyManager.add(app.getPath("userData"), projectId, command);
   return true;
 });
 
-ipcMain.handle('history:delete', (_, projectId, command) => {
+ipcMain.handle("history:delete", (_, projectId, command) => {
   if (!projects.find((p) => p.id === projectId)) return false;
-  historyManager.deleteCmd(app.getPath('userData'), projectId, command);
+  historyManager.deleteCmd(app.getPath("userData"), projectId, command);
   return true;
 });
 
-ipcMain.handle('history:clear', (_, projectId) => {
+ipcMain.handle("history:clear", (_, projectId) => {
   if (!projects.find((p) => p.id === projectId)) return false;
-  historyManager.clear(app.getPath('userData'), projectId);
+  historyManager.clear(app.getPath("userData"), projectId);
   return true;
 });
 
@@ -880,8 +991,8 @@ ipcMain.handle('history:clear', (_, projectId) => {
 
 const envWatchers = new Map();
 
-ipcMain.handle('env:load', (_, projectId) => {
-  const project = projects.find(p => p.id === projectId);
+ipcMain.handle("env:load", (_, projectId) => {
+  const project = projects.find((p) => p.id === projectId);
   if (!project) return {};
   try {
     return envLoader.loadEnv(project.path, project.envFile);
@@ -890,16 +1001,16 @@ ipcMain.handle('env:load', (_, projectId) => {
   }
 });
 
-ipcMain.handle('env:watch', (_, projectId) => {
+ipcMain.handle("env:watch", (_, projectId) => {
   if (envWatchers.has(projectId)) return;
-  const project = projects.find(p => p.id === projectId);
+  const project = projects.find((p) => p.id === projectId);
   if (!project) return;
   try {
     const watcher = fs.watch(project.path, { persistent: false }, () => {
       try {
         const vars = envLoader.loadEnv(project.path, project.envFile);
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('env:updated', { projectId, vars });
+          mainWindow.webContents.send("env:updated", { projectId, vars });
         }
       } catch {}
     });
@@ -907,50 +1018,58 @@ ipcMain.handle('env:watch', (_, projectId) => {
   } catch {}
 });
 
-ipcMain.handle('env:unwatch', (_, projectId) => {
+ipcMain.handle("env:unwatch", (_, projectId) => {
   const w = envWatchers.get(projectId);
-  if (w) { try { w.close(); } catch {} envWatchers.delete(projectId); }
+  if (w) {
+    try {
+      w.close();
+    } catch {}
+    envWatchers.delete(projectId);
+  }
 });
 
-ipcMain.handle('env:save', (_, projectId, vars) => {
-  const project = projects.find(p => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+ipcMain.handle("env:save", (_, projectId, vars) => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return { success: false, error: "Project not found" };
   let filePath;
   if (project.envFile) {
     filePath = path.isAbsolute(project.envFile)
       ? project.envFile
       : path.join(project.path, project.envFile);
   } else {
-    filePath = path.join(project.path, '.env');
+    filePath = path.join(project.path, ".env");
   }
   try {
-    const content = vars.map(({ key, value }) => `${key}=${value}`).join('\n') + '\n';
-    fs.writeFileSync(filePath, content, 'utf8');
+    const content = vars.map(({ key, value }) => `${key}=${value}`).join("\n") + "\n";
+    fs.writeFileSync(filePath, content, "utf8");
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
 });
 
-ipcMain.handle('env:scan', (_, projectId) => {
-  const project = projects.find(p => p.id === projectId);
+ipcMain.handle("env:scan", (_, projectId) => {
+  const project = projects.find((p) => p.id === projectId);
   if (!project) return [];
   try {
     return envLoader.scanEnvFiles(project.path);
   } catch (err) {
-    console.error('[env:scan] scan failed for', project.path, err);
+    console.error("[env:scan] scan failed for", project.path, err);
     return [];
   }
 });
 
-ipcMain.handle('env:save-file', (_, projectId, absolutePath, vars) => {
-  const project = projects.find(p => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+ipcMain.handle("env:save-file", (_, projectId, absolutePath, vars) => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return { success: false, error: "Project not found" };
   // Use path.resolve for canonical comparison to prevent path traversal (e.g. ../../etc/passwd)
   const resolvedTarget = path.resolve(absolutePath);
   const resolvedProject = path.resolve(project.path);
-  if (!resolvedTarget.startsWith(resolvedProject + path.sep) && resolvedTarget !== resolvedProject) {
-    return { success: false, error: 'Path outside project directory' };
+  if (
+    !resolvedTarget.startsWith(resolvedProject + path.sep) &&
+    resolvedTarget !== resolvedProject
+  ) {
+    return { success: false, error: "Path outside project directory" };
   }
   try {
     envLoader.saveEnvFile(absolutePath, vars);
@@ -960,16 +1079,16 @@ ipcMain.handle('env:save-file', (_, projectId, absolutePath, vars) => {
   }
 });
 
-ipcMain.handle('env:create-file', (_, projectId, relativePath) => {
-  const project = projects.find(p => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+ipcMain.handle("env:create-file", (_, projectId, relativePath) => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return { success: false, error: "Project not found" };
   try {
     const abs = path.join(project.path, relativePath);
     // Prevent path traversal — file must stay inside the project directory
     const resolvedAbs = path.resolve(abs);
     const resolvedProject = path.resolve(project.path);
     if (!resolvedAbs.startsWith(resolvedProject + path.sep)) {
-      return { success: false, error: 'Path outside project directory' };
+      return { success: false, error: "Path outside project directory" };
     }
     envLoader.createEnvFile(abs);
     return { success: true, absolutePath: abs };
@@ -980,8 +1099,8 @@ ipcMain.handle('env:create-file', (_, projectId, relativePath) => {
 
 // ─── IPC: Pinned commands ─────────────────────────────────────────────────────
 
-ipcMain.handle('pins:add', (_, projectId, command) => {
-  const idx = projects.findIndex(p => p.id === projectId);
+ipcMain.handle("pins:add", (_, projectId, command) => {
+  const idx = projects.findIndex((p) => p.id === projectId);
   if (idx === -1) return false;
   const pins = [...(projects[idx].pinnedCommands || [])];
   if (!pins.includes(command) && pins.length < 8) pins.push(command);
@@ -990,16 +1109,19 @@ ipcMain.handle('pins:add', (_, projectId, command) => {
   return true;
 });
 
-ipcMain.handle('pins:remove', (_, projectId, command) => {
-  const idx = projects.findIndex(p => p.id === projectId);
+ipcMain.handle("pins:remove", (_, projectId, command) => {
+  const idx = projects.findIndex((p) => p.id === projectId);
   if (idx === -1) return false;
-  projects[idx] = { ...projects[idx], pinnedCommands: (projects[idx].pinnedCommands || []).filter(c => c !== command) };
+  projects[idx] = {
+    ...projects[idx],
+    pinnedCommands: (projects[idx].pinnedCommands || []).filter((c) => c !== command),
+  };
   saveProjects();
   return true;
 });
 
-ipcMain.handle('pins:reorder', (_, projectId, commands) => {
-  const idx = projects.findIndex(p => p.id === projectId);
+ipcMain.handle("pins:reorder", (_, projectId, commands) => {
+  const idx = projects.findIndex((p) => p.id === projectId);
   if (idx === -1) return false;
   projects[idx] = { ...projects[idx], pinnedCommands: commands };
   saveProjects();
@@ -1008,11 +1130,11 @@ ipcMain.handle('pins:reorder', (_, projectId, commands) => {
 
 // ─── IPC: Editors ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('editors:get-installed', async () => {
+ipcMain.handle("editors:get-installed", async () => {
   return editorManager.getInstalled();
 });
 
-ipcMain.handle('editors:open', async (_, editor, projectPath) => {
+ipcMain.handle("editors:open", async (_, editor, projectPath) => {
   try {
     await editorManager.open(editor, projectPath);
     return { success: true };
@@ -1023,40 +1145,46 @@ ipcMain.handle('editors:open', async (_, editor, projectPath) => {
 
 // ─── IPC: PTY ─────────────────────────────────────────────────────────────────
 
-ipcMain.handle('pty:create', (_, projectId, type, cols, rows) => {
+ipcMain.handle("pty:create", (_, projectId, type, cols, rows) => {
   const project = projects.find((p) => p.id === projectId);
-  if (!project) return { success: false, error: 'Project not found' };
+  if (!project) return { success: false, error: "Project not found" };
 
   const sessionId = `${projectId}-${type}`;
-  ptyManager.create(sessionId, project.path, (data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('pty:output', { sessionId, data });
-    }
-  }, cols, rows);
+  ptyManager.create(
+    sessionId,
+    project.path,
+    (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("pty:output", { sessionId, data });
+      }
+    },
+    cols,
+    rows,
+  );
 
   return { success: true, sessionId };
 });
 
-ipcMain.on('pty:input', (_, sessionId, data) => {
+ipcMain.on("pty:input", (_, sessionId, data) => {
   ptyManager.write(sessionId, data);
 });
 
-ipcMain.on('pty:resize', (_, sessionId, cols, rows) => {
+ipcMain.on("pty:resize", (_, sessionId, cols, rows) => {
   ptyManager.resize(sessionId, cols, rows);
 });
 
-ipcMain.handle('pty:destroy', (_, sessionId) => {
+ipcMain.handle("pty:destroy", (_, sessionId) => {
   ptyManager.destroy(sessionId);
   return true;
 });
 
 // ─── IPC: Claude ──────────────────────────────────────────────────────────────
 
-ipcMain.handle('claude:check', async () => {
+ipcMain.handle("claude:check", async () => {
   return await editorManager.checkClaude();
 });
 
-ipcMain.handle('claude:open-external', async (_, projectPath) => {
+ipcMain.handle("claude:open-external", async (_, projectPath) => {
   try {
     await editorManager.openClaudeExternal(projectPath);
     return { success: true };
@@ -1067,11 +1195,11 @@ ipcMain.handle('claude:open-external', async (_, projectPath) => {
 
 // ─── IPC: Terminals ───────────────────────────────────────────────────────────
 
-ipcMain.handle('terminals:get-installed', async () => {
+ipcMain.handle("terminals:get-installed", async () => {
   return terminalManager.getInstalled();
 });
 
-ipcMain.handle('terminal:open', async (_, terminalId, projectPath) => {
+ipcMain.handle("terminal:open", async (_, terminalId, projectPath) => {
   try {
     await terminalManager.openInTerminal(terminalId, projectPath);
     return { success: true };
@@ -1082,86 +1210,106 @@ ipcMain.handle('terminal:open', async (_, terminalId, projectPath) => {
 
 // ─── IPC: Settings ────────────────────────────────────────────────────────────
 
-ipcMain.handle('settings:get', () => {
+ipcMain.handle("settings:get", () => {
   return settings.get();
 });
 
-ipcMain.handle('settings:set', (_, updates) => {
+ipcMain.handle("settings:set", (_, updates) => {
   return settings.set(updates);
 });
 
 // ─── IPC: Settings panel ──────────────────────────────────────────────────────
 
 function normalizePermStatus(s) {
-  if (s === 'granted' || s === 'authorized') return 'granted';
-  if (s === 'denied' || s === 'restricted') return 'denied';
-  return 'not-determined';
+  if (s === "granted" || s === "authorized") return "granted";
+  if (s === "denied" || s === "restricted") return "denied";
+  return "not-determined";
 }
 
-ipcMain.handle('settings:get-permissions', async () => {
+ipcMain.handle("settings:get-permissions", async () => {
   const perms = {};
 
   // Notifications
   try {
-    const s = systemPreferences.getAuthorizationStatus('notifications');
+    const s = systemPreferences.getAuthorizationStatus("notifications");
     perms.notifications = normalizePermStatus(s);
-  } catch { perms.notifications = 'not-determined'; }
+  } catch {
+    perms.notifications = "not-determined";
+  }
 
   // Accessibility
   try {
-    perms.accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied';
-  } catch { perms.accessibility = 'not-determined'; }
+    perms.accessibility = systemPreferences.isTrustedAccessibilityClient(false)
+      ? "granted"
+      : "denied";
+  } catch {
+    perms.accessibility = "not-determined";
+  }
 
   // Full Disk Access
   try {
-    const s = systemPreferences.getAuthorizationStatus('fullDiskAccess');
+    const s = systemPreferences.getAuthorizationStatus("fullDiskAccess");
     perms.fullDiskAccess = normalizePermStatus(s);
   } catch {
     // Fallback: probe the TCC database — readable only with FDA
     try {
-      const tcc = path.join(os.homedir(), 'Library', 'Application Support', 'com.apple.TCC', 'TCC.db');
+      const tcc = path.join(
+        os.homedir(),
+        "Library",
+        "Application Support",
+        "com.apple.TCC",
+        "TCC.db",
+      );
       fs.accessSync(tcc, fs.constants.R_OK);
-      perms.fullDiskAccess = 'granted';
+      perms.fullDiskAccess = "granted";
     } catch (err) {
-      perms.fullDiskAccess = (err.code === 'EACCES' || err.code === 'EPERM') ? 'denied' : 'not-determined';
+      perms.fullDiskAccess =
+        err.code === "EACCES" || err.code === "EPERM" ? "denied" : "not-determined";
     }
   }
 
   // Camera
   try {
-    perms.camera = systemPreferences.getMediaAccessStatus('camera');
-  } catch { perms.camera = 'not-determined'; }
+    perms.camera = systemPreferences.getMediaAccessStatus("camera");
+  } catch {
+    perms.camera = "not-determined";
+  }
 
   // Microphone
   try {
-    perms.microphone = systemPreferences.getMediaAccessStatus('microphone');
-  } catch { perms.microphone = 'not-determined'; }
+    perms.microphone = systemPreferences.getMediaAccessStatus("microphone");
+  } catch {
+    perms.microphone = "not-determined";
+  }
 
   // Screen Recording
   try {
-    perms.screen = systemPreferences.getMediaAccessStatus('screen');
-  } catch { perms.screen = 'not-determined'; }
+    perms.screen = systemPreferences.getMediaAccessStatus("screen");
+  } catch {
+    perms.screen = "not-determined";
+  }
 
   return perms;
 });
 
-ipcMain.handle('settings:request-permission', async (_, name) => {
+ipcMain.handle("settings:request-permission", async (_, name) => {
   try {
-    if (name === 'camera' || name === 'microphone') {
+    if (name === "camera" || name === "microphone") {
       const granted = await systemPreferences.askForMediaAccess(name);
       return { success: true, granted };
     }
-    return { success: false, error: 'Cannot request this permission programmatically' };
+    return { success: false, error: "Cannot request this permission programmatically" };
   } catch (err) {
     return { success: false, error: err.message };
   }
 });
 
-ipcMain.handle('settings:open-system-prefs', async (_, url) => {
+ipcMain.handle("settings:open-system-prefs", async (_, url) => {
   // Only allow x-apple.systempreferences: URLs — reject anything else
-  const safeUrl = (typeof url === 'string' && url.startsWith('x-apple.systempreferences:'))
-    ? url
-    : 'x-apple.systempreferences:';
+  const safeUrl =
+    typeof url === "string" && url.startsWith("x-apple.systempreferences:")
+      ? url
+      : "x-apple.systempreferences:";
   try {
     await shell.openExternal(safeUrl);
     return { success: true };
@@ -1170,17 +1318,17 @@ ipcMain.handle('settings:open-system-prefs', async (_, url) => {
   }
 });
 
-ipcMain.handle('settings:get-general', () => {
+ipcMain.handle("settings:get-general", () => {
   try {
     const version = app.getVersion();
     const { openAtLogin } = app.getLoginItemSettings();
     return { version, launchAtLogin: openAtLogin };
   } catch {
-    return { version: '', launchAtLogin: false };
+    return { version: "", launchAtLogin: false };
   }
 });
 
-ipcMain.handle('settings:set-launch-at-login', (_, value) => {
+ipcMain.handle("settings:set-launch-at-login", (_, value) => {
   try {
     app.setLoginItemSettings({ openAtLogin: Boolean(value) });
     return { success: true };
@@ -1189,7 +1337,7 @@ ipcMain.handle('settings:set-launch-at-login', (_, value) => {
   }
 });
 
-ipcMain.handle('settings:clear-data', async () => {
+ipcMain.handle("settings:clear-data", async () => {
   try {
     await processManager.stopAll().catch(() => {});
     projects = [];
@@ -1200,36 +1348,36 @@ ipcMain.handle('settings:clear-data', async () => {
   }
 });
 
-ipcMain.handle('terminals:add-custom', (_, terminal) => {
+ipcMain.handle("terminals:add-custom", (_, terminal) => {
   return settings.addCustomTerminal(terminal);
 });
 
-ipcMain.handle('terminals:remove-custom', (_, id) => {
+ipcMain.handle("terminals:remove-custom", (_, id) => {
   return settings.removeCustomTerminal(id);
 });
 
 // ─── IPC: Docker ──────────────────────────────────────────────────────────────
 
-ipcMain.handle('docker:check', async () => {
+ipcMain.handle("docker:check", async () => {
   const available = await dockerManager.checkAvailable();
   dockerAvailable = available;
   if (available && !dockerPollTimer) startDockerPolling();
   return available;
 });
 
-ipcMain.handle('docker:list-containers', () => {
+ipcMain.handle("docker:list-containers", () => {
   return dockerManager.listContainers();
 });
 
-ipcMain.handle('docker:project-containers', (_, projectPath) => {
+ipcMain.handle("docker:project-containers", (_, projectPath) => {
   return dockerManager.getProjectContainers(projectPath);
 });
 
-ipcMain.handle('docker:has-compose', (_, projectPath) => {
+ipcMain.handle("docker:has-compose", (_, projectPath) => {
   return dockerManager.hasComposeFile(projectPath);
 });
 
-ipcMain.handle('docker:start', async (_, id) => {
+ipcMain.handle("docker:start", async (_, id) => {
   try {
     await dockerManager.startContainer(id);
     pollDocker();
@@ -1239,7 +1387,7 @@ ipcMain.handle('docker:start', async (_, id) => {
   }
 });
 
-ipcMain.handle('docker:stop', async (_, id) => {
+ipcMain.handle("docker:stop", async (_, id) => {
   try {
     await dockerManager.stopContainer(id);
     pollDocker();
@@ -1249,7 +1397,7 @@ ipcMain.handle('docker:stop', async (_, id) => {
   }
 });
 
-ipcMain.handle('docker:restart', async (_, id) => {
+ipcMain.handle("docker:restart", async (_, id) => {
   try {
     await dockerManager.restartContainer(id);
     pollDocker();
@@ -1259,25 +1407,25 @@ ipcMain.handle('docker:restart', async (_, id) => {
   }
 });
 
-ipcMain.handle('docker:logs', (_, id) => {
+ipcMain.handle("docker:logs", (_, id) => {
   return dockerManager.getLogs(id);
 });
 
 // ─── IPC: Dock badge ──────────────────────────────────────────────────────────
 
-ipcMain.handle('app:set-badge-count', (_, count) => {
+ipcMain.handle("app:set-badge-count", (_, count) => {
   app.setBadgeCount(count || 0);
 });
 
 // ─── IPC: Dev rebuild & install ───────────────────────────────────────────────
 
-ipcMain.handle('dev:rebuild-install', () => {
-  const { spawn } = require('child_process');
-  const scriptPath = path.join(__dirname, '..', 'dev-install.sh');
-  const child = spawn('bash', [scriptPath], {
-    cwd: path.join(__dirname, '..'),
+ipcMain.handle("dev:rebuild-install", () => {
+  const { spawn } = require("child_process");
+  const scriptPath = path.join(__dirname, "..", "dev-install.sh");
+  const child = spawn("bash", [scriptPath], {
+    cwd: path.join(__dirname, ".."),
     detached: true,
-    stdio: 'ignore',
+    stdio: "ignore",
   });
   child.unref();
   return { success: true };
@@ -1285,22 +1433,22 @@ ipcMain.handle('dev:rebuild-install', () => {
 
 // ─── IPC: Dialog ──────────────────────────────────────────────────────────────
 
-ipcMain.handle('dialog:open-folder', async () => {
+ipcMain.handle("dialog:open-folder", async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory'],
-    title: 'Select Project Folder',
+    properties: ["openDirectory"],
+    title: "Select Project Folder",
   });
   return result.canceled ? null : result.filePaths[0];
 });
 
-ipcMain.handle('dialog:pick-app', async () => {
+ipcMain.handle("dialog:pick-app", async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile'],
-    title: 'Select Terminal App',
-    defaultPath: '/Applications',
-    filters: [{ name: 'Applications', extensions: ['app'] }],
+    properties: ["openFile"],
+    title: "Select Terminal App",
+    defaultPath: "/Applications",
+    filters: [{ name: "Applications", extensions: ["app"] }],
   });
   return result.canceled ? null : result.filePaths[0];
 });

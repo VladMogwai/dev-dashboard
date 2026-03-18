@@ -17,11 +17,19 @@ const STATUS_COLOR = {
   '?': 'text-slate-500',
 };
 
-function FileRow({ file, onStage, onUnstage, loading, diffStats, onDiffSelect }) {
-  const statusChar = file.isUntracked ? '?' : (file.isStaged ? file.x : file.y);
+// viewAsStaged: true  → render as staged (click = unstage)
+//               false → render as unstaged (click = stage)
+// Needed for files that are BOTH staged AND have working-tree changes — they appear
+// in both sections with opposite behaviours.
+function FileRow({ file, viewAsStaged, onStage, onUnstage, loading, diffStats, onDiffSelect }) {
+  // Pin the full untruncated path here — never derive it from rendered text.
+  const fullPath = file.path;
+  // If viewAsStaged is explicitly supplied use it; otherwise fall back to the file flag.
+  const effectivelyStaged = viewAsStaged !== undefined ? viewAsStaged : file.isStaged;
+  const statusChar = file.isUntracked ? '?' : (effectivelyStaged ? file.x : file.y);
   const colorClass = STATUS_COLOR[statusChar] || 'text-slate-400';
-  const isAdding = loading === 'stage-' + file.path;
-  const isRemoving = loading === 'unstage-' + file.path;
+  const isAdding = loading === 'stage-' + fullPath;
+  const isRemoving = loading === 'unstage-' + fullPath;
   const added = diffStats?.added || 0;
   const deleted = diffStats?.deleted || 0;
 
@@ -29,10 +37,13 @@ function FileRow({ file, onStage, onUnstage, loading, diffStats, onDiffSelect })
     <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-800/40 group transition-colors">
       {/* Stage toggle */}
       <button
-        onClick={() => file.isStaged ? onUnstage(file.path) : onStage(file.path)}
+        onClick={() => {
+          console.log('[FileRow] click fullPath:', JSON.stringify(fullPath), 'effectivelyStaged:', effectivelyStaged);
+          effectivelyStaged ? onUnstage(fullPath) : onStage(fullPath);
+        }}
         disabled={isAdding || isRemoving}
         className={`w-4 h-4 flex-shrink-0 rounded flex items-center justify-center border transition-colors ${
-          file.isStaged
+          effectivelyStaged
             ? 'bg-violet-600 border-violet-600 hover:bg-violet-700'
             : 'bg-transparent border-slate-600 hover:border-violet-500'
         }`}
@@ -42,7 +53,7 @@ function FileRow({ file, onStage, onUnstage, loading, diffStats, onDiffSelect })
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
-        ) : file.isStaged ? (
+        ) : effectivelyStaged ? (
           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
@@ -54,13 +65,13 @@ function FileRow({ file, onStage, onUnstage, loading, diffStats, onDiffSelect })
         {STATUS_LABEL[statusChar] || statusChar}
       </span>
 
-      {/* File path — click to scroll diff */}
+      {/* File path — click to scroll diff. CSS truncation only; data comes from fullPath. */}
       <button
-        onClick={() => onDiffSelect?.(file.path)}
+        onClick={() => onDiffSelect?.(fullPath)}
         className="text-xs text-slate-300 truncate font-mono flex-1 min-w-0 text-left hover:text-violet-300 transition-colors"
-        title={file.path}
+        title={fullPath}
       >
-        {file.path}
+        {fullPath}
       </button>
 
       {/* +/- stats */}
@@ -90,8 +101,11 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
   const refresh = useCallback(async () => {
     try {
       const s = await gitGetStagingStatus(projectId);
+      console.log('[staging] refresh: got status, files:', s?.files?.length, 'isRepo:', s?.isRepo);
       setStatus(s);
-    } catch {}
+    } catch (err) {
+      console.error('[staging] refresh error:', err);
+    }
   }, [projectId]);
 
   // Load branch list for "pull from" selector
@@ -109,32 +123,78 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
     return () => clearInterval(t);
   }, [refresh, active]);
 
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function handleStage(filePath) {
+    console.log('[staging] handleStage called, projectId:', projectId, 'filePath:', filePath);
     setLoading('stage-' + filePath);
-    await gitStageFile(projectId, filePath);
-    await refresh();
-    setLoading(null);
+    setError('');
+    try {
+      const result = await gitStageFile(projectId, filePath);
+      console.log('[staging] gitStageFile result:', result);
+      if (result && !result.success) setError(result.error || 'Stage failed');
+    } catch (err) {
+      console.error('[staging] gitStageFile threw:', err);
+      setError(err.message || 'Stage failed');
+    } finally {
+      await delay(150);
+      await refresh();
+      setLoading(null);
+    }
   }
 
   async function handleUnstage(filePath) {
+    console.log('[staging] handleUnstage called, projectId:', projectId, 'filePath:', filePath);
     setLoading('unstage-' + filePath);
-    await gitUnstageFile(projectId, filePath);
-    await refresh();
-    setLoading(null);
+    setError('');
+    try {
+      const result = await gitUnstageFile(projectId, filePath);
+      console.log('[staging] gitUnstageFile result:', result);
+      if (result && !result.success) setError(result.error || 'Unstage failed');
+    } catch (err) {
+      console.error('[staging] gitUnstageFile threw:', err);
+      setError(err.message || 'Unstage failed');
+    } finally {
+      await delay(150);
+      await refresh();
+      setLoading(null);
+    }
   }
 
   async function handleStageAll() {
+    console.log('[staging] handleStageAll called, projectId:', projectId);
     setLoading('all');
-    await gitStageAll(projectId);
-    await refresh();
-    setLoading(null);
+    setError('');
+    try {
+      const result = await gitStageAll(projectId);
+      console.log('[staging] gitStageAll result:', result);
+      if (result && !result.success) setError(result.error || 'Stage all failed');
+    } catch (err) {
+      console.error('[staging] gitStageAll threw:', err);
+      setError(err.message || 'Stage all failed');
+    } finally {
+      await delay(150);
+      await refresh();
+      setLoading(null);
+    }
   }
 
   async function handleUnstageAll() {
+    console.log('[staging] handleUnstageAll called, projectId:', projectId);
     setLoading('unstage-all');
-    await gitUnstageAll(projectId);
-    await refresh();
-    setLoading(null);
+    setError('');
+    try {
+      const result = await gitUnstageAll(projectId);
+      console.log('[staging] gitUnstageAll result:', result);
+      if (result && !result.success) setError(result.error || 'Unstage all failed');
+    } catch (err) {
+      console.error('[staging] gitUnstageAll threw:', err);
+      setError(err.message || 'Unstage all failed');
+    } finally {
+      await delay(150);
+      await refresh();
+      setLoading(null);
+    }
   }
 
   async function handleCommit() {
@@ -184,8 +244,10 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
     setPulling(false);
   }
 
+  // A file can be BOTH staged AND have working-tree changes (e.g. porcelain "MM").
+  // Show it in BOTH sections so the UI matches what `git status` reports.
   const stagedFiles = status.files.filter((f) => f.isStaged);
-  const unstagedFiles = status.files.filter((f) => !f.isStaged);
+  const unstagedFiles = status.files.filter((f) => f.isUnstaged || f.isUntracked);
   const hasStagedFiles = stagedFiles.length > 0;
   const hasAnyFiles = status.files.length > 0;
 
@@ -251,6 +313,7 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
                   <FileRow
                     key={f.path + '-staged'}
                     file={f}
+                    viewAsStaged={true}
                     onStage={handleStage}
                     onUnstage={handleUnstage}
                     loading={loading}
@@ -271,6 +334,7 @@ export default function GitStagingPanel({ projectId, projectPath, active = true,
                   <FileRow
                     key={f.path + '-unstaged'}
                     file={f}
+                    viewAsStaged={false}
                     onStage={handleStage}
                     onUnstage={handleUnstage}
                     loading={loading}
